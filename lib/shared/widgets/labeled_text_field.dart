@@ -16,6 +16,12 @@ class LabeledTextField extends StatelessWidget {
     this.minLines,
     this.textInputAction,
     this.errorText,
+    this.obscureText = false,
+    this.prefixIcon,
+    this.suffixIcon,
+    this.autofillHints,
+    this.autocorrect = true,
+    this.enableSuggestions = true,
   }) : assert(
          controller == null || initialValue == null,
          'Provide either a controller or an initialValue, not both.',
@@ -32,6 +38,12 @@ class LabeledTextField extends StatelessWidget {
   final int? minLines;
   final TextInputAction? textInputAction;
   final String? errorText;
+  final bool obscureText;
+  final Widget? prefixIcon;
+  final Widget? suffixIcon;
+  final Iterable<String>? autofillHints;
+  final bool autocorrect;
+  final bool enableSuggestions;
 
   @override
   Widget build(BuildContext context) {
@@ -49,7 +61,16 @@ class LabeledTextField extends StatelessWidget {
           maxLines: maxLines,
           minLines: minLines,
           textInputAction: textInputAction,
-          decoration: InputDecoration(hintText: hint, errorText: errorText),
+          obscureText: obscureText,
+          autofillHints: autofillHints,
+          autocorrect: autocorrect,
+          enableSuggestions: enableSuggestions,
+          decoration: InputDecoration(
+            hintText: hint,
+            errorText: errorText,
+            prefixIcon: prefixIcon,
+            suffixIcon: suffixIcon,
+          ),
         ),
       ],
     );

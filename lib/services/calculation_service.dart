@@ -11,13 +11,13 @@ class CalculationService extends GetxService {
 
   final UnitConversionService _unitConversionService;
 
-  DistanceResult calculate({
+  DistanceResult calculateDistance({
     required MeasurementSystem measurementSystem,
     required double targetSizeValue,
-    required MeasurementUnit targetUnit,
+    required UnitType targetUnit,
     required double reticleReading,
     required ReticleType reticleType,
-    required DistanceOutputPreference outputPreference,
+    required DistanceDisplayPreference displayPreference,
   }) {
     if (targetSizeValue <= 0) {
       throw const CalculationException(
@@ -48,15 +48,23 @@ class CalculationService extends GetxService {
       ),
     };
 
-    return convertDistanceOutput(
+    return convertDistanceForDisplay(
       distanceMeters: distanceMeters,
-      outputPreference: outputPreference,
+      displayPreference: displayPreference,
+      formulaPreview: buildFormulaPreview(
+        measurementSystem: measurementSystem,
+        targetSizeValue: targetSizeValue,
+        targetUnit: targetUnit,
+        reticleReading: reticleReading,
+        reticleType: reticleType,
+      ),
+      measurementSystem: measurementSystem,
     );
   }
 
   double calculateMetricDistance({
     required double targetSizeValue,
-    required MeasurementUnit targetUnit,
+    required UnitType targetUnit,
     required double reticleReading,
     required ReticleType reticleType,
   }) {
@@ -74,7 +82,7 @@ class CalculationService extends GetxService {
 
   double calculateImperialDistance({
     required double targetSizeValue,
-    required MeasurementUnit targetUnit,
+    required UnitType targetUnit,
     required double reticleReading,
     required ReticleType reticleType,
   }) {
@@ -90,15 +98,38 @@ class CalculationService extends GetxService {
     );
   }
 
-  DistanceResult convertDistanceOutput({
+  DistanceResult convertDistanceForDisplay({
     required double distanceMeters,
-    required DistanceOutputPreference outputPreference,
+    required DistanceDisplayPreference displayPreference,
+    required String formulaPreview,
+    required MeasurementSystem measurementSystem,
   }) {
     return DistanceResult(
       distanceMeters: distanceMeters,
       distanceYards: _unitConversionService.metersToYards(distanceMeters),
-      outputPreference: outputPreference,
+      displayPreference: displayPreference,
+      formulaPreview: formulaPreview,
+      measurementSystem: measurementSystem,
     );
+  }
+
+  String buildFormulaPreview({
+    required MeasurementSystem measurementSystem,
+    required double targetSizeValue,
+    required UnitType targetUnit,
+    required double reticleReading,
+    required ReticleType reticleType,
+  }) {
+    final constant = switch (measurementSystem) {
+      MeasurementSystem.metric => metricFormulaConstant,
+      MeasurementSystem.imperial => imperialFormulaConstant,
+    };
+    final unitLabel = switch (measurementSystem) {
+      MeasurementSystem.metric => 'm',
+      MeasurementSystem.imperial => 'yd',
+    };
+
+    return '(${targetSizeValue.toStringAsFixed(2)} ${targetUnit.shortLabel} × ${constant.toStringAsFixed(0)}) ÷ ${reticleReading.toStringAsFixed(2)} ${reticleType.label} = distance $unitLabel';
   }
 
   double _solveDistance({

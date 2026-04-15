@@ -23,7 +23,7 @@ class RangeCardListScreen extends GetView<RangeCardListController> {
           children: [
             LabeledTextField(
               label: 'Search Entries',
-              hint: 'Search target, notes, or DOPE',
+              hint: 'Search target, DOPE, wind, or notes',
               onChanged: controller.setSearchQuery,
             ),
             const SizedBox(height: AppSpacing.md),
@@ -34,7 +34,7 @@ class RangeCardListScreen extends GetView<RangeCardListController> {
                   return const EmptyStateView(
                     title: 'No range card entries',
                     description:
-                        'Save a calculator result to build a local range card for field use.',
+                        'Calculate distance on the main screen and save the result here for field reference.',
                     icon: Icons.view_agenda_outlined,
                   );
                 }

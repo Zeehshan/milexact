@@ -15,18 +15,23 @@ class AppBottomNavBar extends StatelessWidget {
     ),
     _NavItem(
       route: AppRoutes.rangeCardList,
-      label: 'Range Card',
+      label: 'Range',
       icon: Icons.view_agenda_rounded,
     ),
     _NavItem(
-      route: AppRoutes.presetManager,
+      route: AppRoutes.quickPresets,
       label: 'Presets',
       icon: Icons.category_rounded,
     ),
     _NavItem(
-      route: AppRoutes.settings,
-      label: 'Settings',
-      icon: Icons.tune_rounded,
+      route: AppRoutes.dopeProfiles,
+      label: 'DOPE',
+      icon: Icons.straighten_rounded,
+    ),
+    _NavItem(
+      route: AppRoutes.visualRangeCard,
+      label: 'Visual',
+      icon: Icons.explore_rounded,
     ),
   ];
 

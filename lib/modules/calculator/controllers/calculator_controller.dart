@@ -1,4 +1,4 @@
-import 'package:flutter/widgets.dart';
+import 'package:flutter/material.dart';
 import 'package:get/get.dart';
 import 'package:milexact/app/routes/app_routes.dart';
 import 'package:milexact/data/models/distance_result.dart';
@@ -9,6 +9,8 @@ import 'package:milexact/data/models/target_preset.dart';
 import 'package:milexact/data/repositories/presets_repository.dart';
 import 'package:milexact/data/repositories/settings_repository.dart';
 import 'package:milexact/services/calculation_service.dart';
+import 'package:milexact/services/reticle_measurement_service.dart';
+import 'package:milexact/shared/utils/formatters.dart';
 import 'package:milexact/shared/utils/id_generator.dart';
 
 class CalculatorController extends GetxController {
@@ -16,27 +18,34 @@ class CalculatorController extends GetxController {
     this._presetsRepository,
     this._settingsRepository,
     this._calculationService,
+    this._reticleMeasurementService,
   );
 
   final PresetsRepository _presetsRepository;
   final SettingsRepository _settingsRepository;
   final CalculationService _calculationService;
+  final ReticleMeasurementService _reticleMeasurementService;
 
   final manualTargetNameController = TextEditingController();
-  final manualTargetSizeController = TextEditingController();
+  final manualTargetHeightController = TextEditingController();
+  final manualTargetWidthController = TextEditingController();
   final reticleReadingController = TextEditingController();
 
   final targetInputMode = TargetInputMode.preset.obs;
+  final referenceDimension = TargetDimensionType.height.obs;
   final measurementSystem = MeasurementSystem.metric.obs;
   final selectedCategoryId = RxnString();
   final selectedPresetId = RxnString();
-  final manualTargetName = ''.obs;
-  final manualTargetSizeInput = ''.obs;
-  final reticleReadingInput = ''.obs;
-  final selectedTargetUnit = MeasurementUnit.meter.obs;
+  final selectedTargetUnit = UnitType.meter.obs;
   final selectedReticleType = ReticleType.mil.obs;
-  final outputPreference = DistanceOutputPreference.both.obs;
-  final autoCalculateEnabled = true.obs;
+  final selectedReticleProfile = ReticleProfile.simpleCrosshair.obs;
+  final displayPreference = DistanceDisplayPreference.both.obs;
+  final liveCalculationEnabled = true.obs;
+  final reticleHandleFraction = 0.12.obs;
+  final manualTargetName = ''.obs;
+  final manualTargetHeightInput = ''.obs;
+  final manualTargetWidthInput = ''.obs;
+  final reticleReadingInput = ''.obs;
   final result = Rxn<DistanceResult>();
   final errorMessage = ''.obs;
 
@@ -69,23 +78,49 @@ class CalculatorController extends GetxController {
     return label.isEmpty ? 'Custom Target' : label;
   }
 
-  MeasurementUnit get activeTargetUnit {
+  double? get activeHeightValue {
     if (isPresetMode) {
-      return selectedPreset?.sizeUnit ?? selectedTargetUnit.value;
+      return selectedPreset?.heightValue;
+    }
+    return double.tryParse(manualTargetHeightInput.value.trim());
+  }
+
+  UnitType get activeHeightUnit {
+    if (isPresetMode) {
+      return selectedPreset?.heightUnit ?? selectedTargetUnit.value;
     }
     return selectedTargetUnit.value;
   }
 
-  double? get activeTargetSizeValue {
+  double? get activeWidthValue {
     if (isPresetMode) {
-      return selectedPreset?.sizeValue;
+      return selectedPreset?.widthValue;
     }
-    return double.tryParse(manualTargetSizeInput.value.trim());
+    return double.tryParse(manualTargetWidthInput.value.trim());
   }
 
-  double? get parsedReticleReading {
-    return double.tryParse(reticleReadingInput.value.trim());
+  UnitType get activeWidthUnit {
+    if (isPresetMode) {
+      return selectedPreset?.widthUnit ?? selectedTargetUnit.value;
+    }
+    return selectedTargetUnit.value;
   }
+
+  double? get activeTargetDimensionValue {
+    return switch (referenceDimension.value) {
+      TargetDimensionType.height => activeHeightValue,
+      TargetDimensionType.width => activeWidthValue,
+    };
+  }
+
+  UnitType get activeTargetDimensionUnit {
+    return switch (referenceDimension.value) {
+      TargetDimensionType.height => activeHeightUnit,
+      TargetDimensionType.width => activeWidthUnit,
+    };
+  }
+
+  bool get canSaveToRangeCard => result.value != null;
 
   @override
   void onInit() {
@@ -98,13 +133,21 @@ class CalculatorController extends GetxController {
   @override
   void onClose() {
     manualTargetNameController.dispose();
-    manualTargetSizeController.dispose();
+    manualTargetHeightController.dispose();
+    manualTargetWidthController.dispose();
     reticleReadingController.dispose();
     super.onClose();
   }
 
   void setTargetInputMode(TargetInputMode mode) {
     targetInputMode.value = mode;
+    _syncMeasurementSystemFromActiveDimension();
+    _handleCalculationInputChange();
+  }
+
+  void setReferenceDimension(TargetDimensionType dimension) {
+    referenceDimension.value = dimension;
+    _syncMeasurementSystemFromActiveDimension();
     _handleCalculationInputChange();
   }
 
@@ -117,16 +160,21 @@ class CalculatorController extends GetxController {
     selectedCategoryId.value = categoryId;
     final presets = availablePresets;
     selectedPresetId.value = presets.isEmpty ? null : presets.first.id;
+    _syncMeasurementSystemFromActiveDimension();
     _handleCalculationInputChange();
   }
 
   void setPreset(String presetId) {
     selectedPresetId.value = presetId;
+    _syncMeasurementSystemFromActiveDimension();
     _handleCalculationInputChange();
   }
 
-  void setTargetUnit(MeasurementUnit unit) {
+  void setTargetUnit(UnitType unit) {
     selectedTargetUnit.value = unit;
+    measurementSystem.value = unit.isMetric
+        ? MeasurementSystem.metric
+        : MeasurementSystem.imperial;
     _handleCalculationInputChange();
   }
 
@@ -135,56 +183,109 @@ class CalculatorController extends GetxController {
     _handleCalculationInputChange();
   }
 
-  void setOutputPreference(DistanceOutputPreference preference) {
-    outputPreference.value = preference;
+  void setReticleProfile(ReticleProfile profile) {
+    selectedReticleProfile.value = profile;
+  }
+
+  void setDisplayPreference(DistanceDisplayPreference preference) {
+    displayPreference.value = preference;
     if (result.value != null) {
-      result.value = result.value!.copyWith(outputPreference: preference);
+      result.value = result.value!.copyWith(displayPreference: preference);
     }
   }
 
+  Future<void> openQuickPresets() async {
+    final selected = await Get.toNamed(
+      AppRoutes.quickPresets,
+      arguments: <String, dynamic>{
+        'selectionMode': true,
+        'selectedCategoryId': selectedCategoryId.value,
+      },
+    );
+
+    if (selected is TargetPreset) {
+      targetInputMode.value = TargetInputMode.preset;
+      selectedCategoryId.value = selected.categoryId;
+      selectedPresetId.value = selected.id;
+      _syncMeasurementSystemFromActiveDimension();
+      _handleCalculationInputChange();
+    }
+  }
+
+  void openRangeCard() => Get.toNamed(AppRoutes.rangeCardList);
+
+  void openDopeProfiles() => Get.toNamed(AppRoutes.dopeProfiles);
+
+  void openVisualRangeCard() => Get.toNamed(AppRoutes.visualRangeCard);
+
+  void updateReticleFromLocalPosition({
+    required Offset localPosition,
+    required Size canvasSize,
+  }) {
+    final mainAxisPosition =
+        referenceDimension.value == TargetDimensionType.height
+        ? localPosition.dy
+        : localPosition.dx;
+    final mainAxisExtent =
+        referenceDimension.value == TargetDimensionType.height
+        ? canvasSize.height
+        : canvasSize.width;
+
+    final handleFraction = _reticleMeasurementService
+        .handleFractionFromLocalPosition(
+          mainAxisPosition: mainAxisPosition,
+          mainAxisExtent: mainAxisExtent,
+        );
+    final reading = _reticleMeasurementService.readingFromHandleFraction(
+      handleFraction,
+    );
+
+    reticleHandleFraction.value = handleFraction;
+    reticleReadingController.value = TextEditingValue(
+      text: AppFormatters.number(reading),
+      selection: TextSelection.collapsed(
+        offset: AppFormatters.number(reading).length,
+      ),
+    );
+  }
+
   void calculate({bool silent = false}) {
-    final targetSize = activeTargetSizeValue;
-    final reading = parsedReticleReading;
+    final selectedDimensionValue = activeTargetDimensionValue;
+    final reticleReading = double.tryParse(reticleReadingInput.value.trim());
 
     if (isPresetMode && selectedPreset == null) {
       result.value = null;
       if (!silent) {
-        errorMessage.value = 'Select a preset target.';
+        errorMessage.value = 'Select a quick preset.';
       }
       return;
     }
 
-    if (targetSize == null || targetSize <= 0) {
+    if (selectedDimensionValue == null || selectedDimensionValue <= 0) {
       result.value = null;
-      if (_shouldShowValidation(
-        rawValue: manualTargetSizeInput.value,
-        silent: silent,
-        allowPresetModeMessage: true,
-      )) {
-        errorMessage.value = 'Enter a valid target size.';
+      if (!silent || !_inputIsEmptyForSelectedDimension()) {
+        errorMessage.value =
+            'Enter a valid ${referenceDimension.value.label.toLowerCase()} value.';
       }
       return;
     }
 
-    if (reading == null || reading <= 0) {
+    if (reticleReading == null || reticleReading <= 0) {
       result.value = null;
-      if (_shouldShowValidation(
-        rawValue: reticleReadingInput.value,
-        silent: silent,
-      )) {
+      if (!silent || reticleReadingInput.value.trim().isNotEmpty) {
         errorMessage.value = 'Enter a valid reticle reading.';
       }
       return;
     }
 
     try {
-      result.value = _calculationService.calculate(
+      result.value = _calculationService.calculateDistance(
         measurementSystem: measurementSystem.value,
-        targetSizeValue: targetSize,
-        targetUnit: activeTargetUnit,
-        reticleReading: reading,
+        targetSizeValue: selectedDimensionValue,
+        targetUnit: activeTargetDimensionUnit,
+        reticleReading: reticleReading,
         reticleType: selectedReticleType.value,
-        outputPreference: outputPreference.value,
+        displayPreference: displayPreference.value,
       );
       errorMessage.value = '';
     } on CalculationException catch (error) {
@@ -201,10 +302,14 @@ class CalculatorController extends GetxController {
     }
 
     final currentResult = result.value;
-    final targetSize = activeTargetSizeValue;
-    final reading = parsedReticleReading;
+    final height = activeHeightValue;
+    final width = activeWidthValue;
+    final reading = double.tryParse(reticleReadingInput.value.trim());
 
-    if (currentResult == null || targetSize == null || reading == null) {
+    if (currentResult == null ||
+        height == null ||
+        width == null ||
+        reading == null) {
       return;
     }
 
@@ -212,18 +317,22 @@ class CalculatorController extends GetxController {
     final entry = RangeCardEntry(
       id: IdGenerator.generate(prefix: 'range'),
       targetName: activeTargetName,
-      targetSizeValue: targetSize,
-      targetSizeUnit: activeTargetUnit,
+      targetHeightValue: height,
+      targetHeightUnit: activeHeightUnit,
+      targetWidthValue: width,
+      targetWidthUnit: activeWidthUnit,
       reticleReading: reading,
       reticleType: selectedReticleType.value,
-      outputPreference: outputPreference.value,
-      calculatedDistanceMeters: currentResult.distanceMeters,
-      calculatedDistanceYards: currentResult.distanceYards,
-      dope: '',
-      windFull: '',
-      windHalf: '',
-      windQuarter: '',
-      notes: '',
+      displayPreference: displayPreference.value,
+      distanceMeters: currentResult.distanceMeters,
+      distanceYards: currentResult.distanceYards,
+      dopeValue: '',
+      selectedDopeProfileId: null,
+      windValueType: WindValueType.none,
+      windDirectionClock: '12',
+      targetPlacementAngle: 90,
+      targetPlacementLabel: '',
+      terrainNotes: '',
       createdAt: now,
       updatedAt: now,
     );
@@ -231,31 +340,39 @@ class CalculatorController extends GetxController {
     Get.toNamed(AppRoutes.rangeCardEdit, arguments: entry);
   }
 
-  void openRangeCard() => Get.toNamed(AppRoutes.rangeCardList);
-
-  void openPresetManager() => Get.toNamed(AppRoutes.presetManager);
-
   void _applyDefaults() {
     final settings = _settingsRepository.settings.value;
     selectedTargetUnit.value = settings.defaultTargetUnit;
     selectedReticleType.value = settings.defaultReticleType;
-    outputPreference.value = settings.defaultOutputPreference;
-    autoCalculateEnabled.value = settings.autoCalculateEnabled;
+    displayPreference.value = settings.defaultDisplayUnit;
+    liveCalculationEnabled.value = settings.liveCalculationEnabled;
     measurementSystem.value = settings.defaultTargetUnit.isMetric
         ? MeasurementSystem.metric
         : MeasurementSystem.imperial;
+    reticleReadingController.text = '1.0';
+    reticleHandleFraction.value = _reticleMeasurementService
+        .handleFractionFromReading(1.0);
   }
 
   void _bindTextControllers() {
     manualTargetNameController.addListener(() {
       manualTargetName.value = manualTargetNameController.text;
     });
-    manualTargetSizeController.addListener(() {
-      manualTargetSizeInput.value = manualTargetSizeController.text;
+    manualTargetHeightController.addListener(() {
+      manualTargetHeightInput.value = manualTargetHeightController.text;
+      _handleCalculationInputChange();
+    });
+    manualTargetWidthController.addListener(() {
+      manualTargetWidthInput.value = manualTargetWidthController.text;
       _handleCalculationInputChange();
     });
     reticleReadingController.addListener(() {
       reticleReadingInput.value = reticleReadingController.text;
+      final reading = double.tryParse(reticleReadingInput.value.trim());
+      if (reading != null && reading > 0) {
+        reticleHandleFraction.value = _reticleMeasurementService
+            .handleFractionFromReading(reading);
+      }
       _handleCalculationInputChange();
     });
   }
@@ -272,28 +389,26 @@ class CalculatorController extends GetxController {
     }
   }
 
+  void _syncMeasurementSystemFromActiveDimension() {
+    measurementSystem.value = activeTargetDimensionUnit.isMetric
+        ? MeasurementSystem.metric
+        : MeasurementSystem.imperial;
+  }
+
   void _handleCalculationInputChange() {
     errorMessage.value = '';
-    if (autoCalculateEnabled.value) {
+    if (liveCalculationEnabled.value) {
       calculate(silent: true);
     } else {
       result.value = null;
     }
   }
 
-  bool _shouldShowValidation({
-    required String rawValue,
-    required bool silent,
-    bool allowPresetModeMessage = false,
-  }) {
-    if (!silent) {
-      return true;
-    }
-
-    if (allowPresetModeMessage && isPresetMode) {
-      return false;
-    }
-
-    return rawValue.trim().isNotEmpty;
+  bool _inputIsEmptyForSelectedDimension() {
+    return switch (referenceDimension.value) {
+      TargetDimensionType.height =>
+        manualTargetHeightInput.value.trim().isEmpty,
+      TargetDimensionType.width => manualTargetWidthInput.value.trim().isEmpty,
+    };
   }
 }

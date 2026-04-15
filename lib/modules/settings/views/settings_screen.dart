@@ -18,8 +18,11 @@ class SettingsScreen extends GetView<SettingsController> {
     return TacticalScaffold(
       title: 'Settings',
       currentRoute: AppRoutes.settings,
+      showBottomNav: false,
+      showSettingsAction: false,
       body: Obx(() {
         final settings = controller.settings.value;
+        final currentUser = controller.currentUser.value;
 
         return SingleChildScrollView(
           padding: AppSpacing.screenPadding,
@@ -30,18 +33,68 @@ class SettingsScreen extends GetView<SettingsController> {
                 child: Column(
                   crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
+                    Text('Account', style: theme.textTheme.titleLarge),
+                    const SizedBox(height: AppSpacing.sm),
+                    Text(
+                      currentUser?.email ?? 'No local account session',
+                      style: theme.textTheme.bodyLarge,
+                    ),
+                    const SizedBox(height: AppSpacing.sm),
+                    Text(
+                      'Email/password sessions are stored locally. Google and Apple sign-in are wired for custom API exchange when your backend URL is configured.',
+                      style: theme.textTheme.bodySmall,
+                    ),
+                    const SizedBox(height: AppSpacing.md),
+                    OutlinedButton.icon(
+                      onPressed: currentUser == null
+                          ? null
+                          : () async {
+                              final confirmed = await Get.dialog<bool>(
+                                AlertDialog(
+                                  title: const Text('Sign Out'),
+                                  content: const Text(
+                                    'Sign out from the current local session?',
+                                  ),
+                                  actions: [
+                                    TextButton(
+                                      onPressed: () => Get.back(result: false),
+                                      child: const Text('Cancel'),
+                                    ),
+                                    FilledButton(
+                                      onPressed: () => Get.back(result: true),
+                                      child: const Text('Sign out'),
+                                    ),
+                                  ],
+                                ),
+                              );
+
+                              if (confirmed ?? false) {
+                                await controller.signOut();
+                              }
+                            },
+                      icon: const Icon(Icons.logout_rounded),
+                      label: const Text('Sign Out'),
+                    ),
+                  ],
+                ),
+              ),
+              const SizedBox(height: AppSpacing.md),
+              SectionCard(
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
                     Text('Defaults', style: theme.textTheme.titleLarge),
                     const SizedBox(height: AppSpacing.md),
                     Text(
-                      'Default Output Preference',
+                      'Default Display Unit',
                       style: theme.textTheme.titleMedium,
                     ),
                     const SizedBox(height: AppSpacing.xs),
-                    SelectorChips<DistanceOutputPreference>(
-                      options: DistanceOutputPreference.values,
-                      selectedValue: settings.defaultOutputPreference,
+                    SelectorChips<DistanceDisplayPreference>(
+                      options: DistanceDisplayPreference.values,
+                      selectedValue: settings.defaultDisplayUnit,
                       labelBuilder: (preference) => preference.label,
-                      onSelected: controller.updateOutputPreference,
+                      onSelected: controller.updateDisplayPreference,
                     ),
                     const SizedBox(height: AppSpacing.md),
                     Text(
@@ -49,8 +102,8 @@ class SettingsScreen extends GetView<SettingsController> {
                       style: theme.textTheme.titleMedium,
                     ),
                     const SizedBox(height: AppSpacing.xs),
-                    SelectorChips<MeasurementUnit>(
-                      options: MeasurementUnit.values,
+                    SelectorChips<UnitType>(
+                      options: UnitType.values,
                       selectedValue: settings.defaultTargetUnit,
                       labelBuilder: (unit) => unit.shortLabel.toUpperCase(),
                       onSelected: controller.updateTargetUnit,
@@ -70,12 +123,12 @@ class SettingsScreen extends GetView<SettingsController> {
                     const SizedBox(height: AppSpacing.md),
                     SwitchListTile.adaptive(
                       contentPadding: EdgeInsets.zero,
-                      title: const Text('Enable Auto-Calculate'),
+                      title: const Text('Live Calculation'),
                       subtitle: const Text(
-                        'Recalculate distance as inputs change on the calculator screen.',
+                        'Calculate immediately when inputs or reticle measurement change.',
                       ),
-                      value: settings.autoCalculateEnabled,
-                      onChanged: controller.updateAutoCalculateEnabled,
+                      value: settings.liveCalculationEnabled,
+                      onChanged: controller.updateLiveCalculationEnabled,
                     ),
                   ],
                 ),
@@ -88,16 +141,17 @@ class SettingsScreen extends GetView<SettingsController> {
                     Text('About', style: theme.textTheme.titleLarge),
                     const SizedBox(height: AppSpacing.sm),
                     Text(
-                      'MilExact is a fully offline scope-based distance calculator built for fast mobile field use. Formula handling, unit conversion, settings, presets, and range card data all stay local on device.',
+                      'MilExact Rev.2 is a fully offline ranging, range-card, DOPE-library, and visual plotting tool for fast field use. All presets, settings, profiles, and cards stay on device.',
                       style: theme.textTheme.bodyMedium,
                     ),
                     const SizedBox(height: AppSpacing.md),
                     Text('Help', style: theme.textTheme.titleMedium),
                     const SizedBox(height: AppSpacing.xs),
                     Text(
-                      '1. Pick a preset target or enter a manual target.\n'
-                      '2. Enter the reticle reading and choose the workflow.\n'
-                      '3. Save the result to the range card and add manual DOPE and wind holds.',
+                      '1. Measure a target with the reticle or enter the reading manually.\n'
+                      '2. Use a quick preset or enter target dimensions.\n'
+                      '3. Save the result to the range card and optionally link it to a visual card.\n'
+                      '4. Manage DOPE profiles as a manual reference library only.',
                       style: theme.textTheme.bodyMedium,
                     ),
                   ],

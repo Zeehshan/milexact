@@ -28,13 +28,11 @@ class SettingsRepository extends GetxService {
     await _storage.settingsBox.put(_settingsKey, nextSettings.toJson());
   }
 
-  Future<void> updateDefaultOutputPreference(
-    DistanceOutputPreference preference,
-  ) {
-    return save(settings.value.copyWith(defaultOutputPreference: preference));
+  Future<void> updateDefaultDisplayUnit(DistanceDisplayPreference preference) {
+    return save(settings.value.copyWith(defaultDisplayUnit: preference));
   }
 
-  Future<void> updateDefaultTargetUnit(MeasurementUnit unit) {
+  Future<void> updateDefaultTargetUnit(UnitType unit) {
     return save(settings.value.copyWith(defaultTargetUnit: unit));
   }
 
@@ -42,7 +40,7 @@ class SettingsRepository extends GetxService {
     return save(settings.value.copyWith(defaultReticleType: reticleType));
   }
 
-  Future<void> updateAutoCalculateEnabled(bool enabled) {
-    return save(settings.value.copyWith(autoCalculateEnabled: enabled));
+  Future<void> updateLiveCalculationEnabled(bool enabled) {
+    return save(settings.value.copyWith(liveCalculationEnabled: enabled));
   }
 }

@@ -23,20 +23,30 @@ abstract final class AppFormatters {
     return '${number(value)} $unitLabel';
   }
 
-  static String targetSize(double value, MeasurementUnit unit) {
+  static String targetSize(double value, UnitType unit) {
     return '${number(value)} ${unit.shortLabel}';
   }
 
   static String distanceSummary({
-    required DistanceOutputPreference preference,
+    required DistanceDisplayPreference preference,
     required double meters,
     required double yards,
   }) {
     return switch (preference) {
-      DistanceOutputPreference.meters => distance(meters, unitLabel: 'm'),
-      DistanceOutputPreference.yards => distance(yards, unitLabel: 'yd'),
-      DistanceOutputPreference.both =>
+      DistanceDisplayPreference.meters => distance(meters, unitLabel: 'm'),
+      DistanceDisplayPreference.yards => distance(yards, unitLabel: 'yd'),
+      DistanceDisplayPreference.both =>
         '${distance(meters, unitLabel: 'm')} • ${distance(yards, unitLabel: 'yd')}',
+    };
+  }
+
+  static String windSummary(
+    WindValueType windValueType, {
+    required String windDirectionClock,
+  }) {
+    return switch (windValueType) {
+      WindValueType.none => 'No Value',
+      _ => '${windValueType.label} • $windDirectionClock o\'clock',
     };
   }
 

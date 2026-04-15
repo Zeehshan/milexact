@@ -17,7 +17,6 @@ class ResultCard extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
-    final hasResult = result != null;
 
     return SectionCard(
       padding: const EdgeInsets.all(AppSpacing.lg),
@@ -26,13 +25,18 @@ class ResultCard extends StatelessWidget {
         children: [
           Text('Distance Solution', style: theme.textTheme.titleLarge),
           const SizedBox(height: AppSpacing.md),
-          if (hasResult) ...[
+          if (result == null)
+            Text(
+              'Use the reticle and target dimensions to solve range instantly.',
+              style: theme.textTheme.bodyLarge,
+            )
+          else ...[
             Wrap(
               spacing: AppSpacing.sm,
               runSpacing: AppSpacing.sm,
               children: [
                 if (result!.showsMeters)
-                  _DistanceStat(
+                  _DistancePill(
                     label: 'METERS',
                     value: AppFormatters.distance(
                       result!.distanceMeters,
@@ -40,7 +44,7 @@ class ResultCard extends StatelessWidget {
                     ),
                   ),
                 if (result!.showsYards)
-                  _DistanceStat(
+                  _DistancePill(
                     label: 'YARDS',
                     value: AppFormatters.distance(
                       result!.distanceYards,
@@ -49,11 +53,8 @@ class ResultCard extends StatelessWidget {
                   ),
               ],
             ),
-          ] else ...[
-            Text(
-              'Enter a target size and reticle reading to calculate distance.',
-              style: theme.textTheme.bodyLarge,
-            ),
+            const SizedBox(height: AppSpacing.md),
+            Text(result!.formulaPreview, style: theme.textTheme.bodySmall),
           ],
           if (errorMessage.isNotEmpty) ...[
             const SizedBox(height: AppSpacing.md),
@@ -70,8 +71,8 @@ class ResultCard extends StatelessWidget {
   }
 }
 
-class _DistanceStat extends StatelessWidget {
-  const _DistanceStat({required this.label, required this.value});
+class _DistancePill extends StatelessWidget {
+  const _DistancePill({required this.label, required this.value});
 
   final String label;
   final String value;
@@ -84,10 +85,10 @@ class _DistanceStat extends StatelessWidget {
       width: 160,
       padding: const EdgeInsets.all(AppSpacing.md),
       decoration: BoxDecoration(
-        borderRadius: BorderRadius.circular(16),
-        color: theme.colorScheme.primary.withValues(alpha: 0.12),
+        borderRadius: BorderRadius.circular(18),
+        color: theme.colorScheme.primary.withValues(alpha: 0.13),
         border: Border.all(
-          color: theme.colorScheme.primary.withValues(alpha: 0.28),
+          color: theme.colorScheme.primary.withValues(alpha: 0.24),
         ),
       ),
       child: Column(
@@ -96,7 +97,7 @@ class _DistanceStat extends StatelessWidget {
           Text(
             label,
             style: theme.textTheme.bodySmall?.copyWith(
-              letterSpacing: 1.2,
+              letterSpacing: 1.0,
               fontWeight: FontWeight.w700,
             ),
           ),

@@ -2,62 +2,71 @@ import 'package:milexact/data/models/enums.dart';
 
 class AppSettings {
   const AppSettings({
-    required this.defaultOutputPreference,
+    required this.defaultDisplayUnit,
     required this.defaultTargetUnit,
     required this.defaultReticleType,
-    required this.autoCalculateEnabled,
+    required this.liveCalculationEnabled,
   });
 
-  final DistanceOutputPreference defaultOutputPreference;
-  final MeasurementUnit defaultTargetUnit;
+  final DistanceDisplayPreference defaultDisplayUnit;
+  final UnitType defaultTargetUnit;
   final ReticleType defaultReticleType;
-  final bool autoCalculateEnabled;
+  final bool liveCalculationEnabled;
 
   factory AppSettings.defaults() {
     return const AppSettings(
-      defaultOutputPreference: DistanceOutputPreference.both,
-      defaultTargetUnit: MeasurementUnit.meter,
+      defaultDisplayUnit: DistanceDisplayPreference.both,
+      defaultTargetUnit: UnitType.meter,
       defaultReticleType: ReticleType.mil,
-      autoCalculateEnabled: true,
+      liveCalculationEnabled: true,
     );
   }
 
   factory AppSettings.fromJson(Map<String, dynamic> json) {
+    final rawDisplayPreference =
+        json['defaultDisplayUnit'] ?? json['defaultOutputPreference'];
+    final rawTargetUnit = json['defaultTargetUnit'];
+    final rawReticleType = json['defaultReticleType'];
+    final rawLiveCalculation =
+        json['liveCalculationEnabled'] ?? json['autoCalculateEnabled'];
+
     return AppSettings(
-      defaultOutputPreference: DistanceOutputPreference.values.byName(
-        json['defaultOutputPreference'] as String,
-      ),
-      defaultTargetUnit: MeasurementUnit.values.byName(
-        json['defaultTargetUnit'] as String,
-      ),
-      defaultReticleType: ReticleType.values.byName(
-        json['defaultReticleType'] as String,
-      ),
-      autoCalculateEnabled: json['autoCalculateEnabled'] as bool,
+      defaultDisplayUnit: rawDisplayPreference is String
+          ? DistanceDisplayPreference.values.byName(rawDisplayPreference)
+          : DistanceDisplayPreference.both,
+      defaultTargetUnit: rawTargetUnit is String
+          ? UnitType.values.byName(rawTargetUnit)
+          : UnitType.meter,
+      defaultReticleType: rawReticleType is String
+          ? ReticleType.values.byName(rawReticleType)
+          : ReticleType.mil,
+      liveCalculationEnabled: rawLiveCalculation is bool
+          ? rawLiveCalculation
+          : true,
     );
   }
 
   Map<String, dynamic> toJson() {
     return {
-      'defaultOutputPreference': defaultOutputPreference.name,
+      'defaultDisplayUnit': defaultDisplayUnit.name,
       'defaultTargetUnit': defaultTargetUnit.name,
       'defaultReticleType': defaultReticleType.name,
-      'autoCalculateEnabled': autoCalculateEnabled,
+      'liveCalculationEnabled': liveCalculationEnabled,
     };
   }
 
   AppSettings copyWith({
-    DistanceOutputPreference? defaultOutputPreference,
-    MeasurementUnit? defaultTargetUnit,
+    DistanceDisplayPreference? defaultDisplayUnit,
+    UnitType? defaultTargetUnit,
     ReticleType? defaultReticleType,
-    bool? autoCalculateEnabled,
+    bool? liveCalculationEnabled,
   }) {
     return AppSettings(
-      defaultOutputPreference:
-          defaultOutputPreference ?? this.defaultOutputPreference,
+      defaultDisplayUnit: defaultDisplayUnit ?? this.defaultDisplayUnit,
       defaultTargetUnit: defaultTargetUnit ?? this.defaultTargetUnit,
       defaultReticleType: defaultReticleType ?? this.defaultReticleType,
-      autoCalculateEnabled: autoCalculateEnabled ?? this.autoCalculateEnabled,
+      liveCalculationEnabled:
+          liveCalculationEnabled ?? this.liveCalculationEnabled,
     );
   }
 }

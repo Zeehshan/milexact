@@ -42,9 +42,9 @@ class RangeCardTile extends StatelessWidget {
                         const SizedBox(height: AppSpacing.xs),
                         Text(
                           AppFormatters.distanceSummary(
-                            preference: entry.outputPreference,
-                            meters: entry.calculatedDistanceMeters,
-                            yards: entry.calculatedDistanceYards,
+                            preference: entry.displayPreference,
+                            meters: entry.distanceMeters,
+                            yards: entry.distanceYards,
                           ),
                           style: theme.textTheme.bodyLarge,
                         ),
@@ -63,24 +63,32 @@ class RangeCardTile extends StatelessWidget {
                 spacing: AppSpacing.xs,
                 runSpacing: AppSpacing.xs,
                 children: [
-                  _ValueTag(label: 'DOPE', value: entry.dope),
-                  _ValueTag(label: 'Wind Full', value: entry.windFull),
-                  _ValueTag(label: 'Wind Half', value: entry.windHalf),
-                  _ValueTag(label: 'Wind Quarter', value: entry.windQuarter),
+                  _ValueTag(
+                    label: 'DOPE',
+                    value: entry.dopeValue.isEmpty ? '--' : entry.dopeValue,
+                  ),
+                  _ValueTag(
+                    label: 'Wind',
+                    value: AppFormatters.windSummary(
+                      entry.windValueType,
+                      windDirectionClock: entry.windDirectionClock,
+                    ),
+                  ),
+                  _ValueTag(
+                    label: 'Placement',
+                    value: entry.targetPlacementLabel.isEmpty
+                        ? '${AppFormatters.number(entry.targetPlacementAngle)}°'
+                        : entry.targetPlacementLabel,
+                  ),
                 ],
               ),
-              if (entry.notes.trim().isNotEmpty) ...[
+              if (entry.terrainNotes.trim().isNotEmpty) ...[
                 const SizedBox(height: AppSpacing.sm),
                 Text(
-                  AppFormatters.preview(entry.notes),
+                  AppFormatters.preview(entry.terrainNotes),
                   style: theme.textTheme.bodyMedium,
                 ),
               ],
-              const SizedBox(height: AppSpacing.sm),
-              Text(
-                'Updated ${AppFormatters.dateTime(entry.updatedAt)}',
-                style: theme.textTheme.bodySmall,
-              ),
             ],
           ),
         ),
@@ -98,7 +106,6 @@ class _ValueTag extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
-    final displayValue = value.trim().isEmpty ? '--' : value.trim();
 
     return Container(
       padding: const EdgeInsets.symmetric(
@@ -112,7 +119,7 @@ class _ValueTag extends StatelessWidget {
           color: theme.colorScheme.primary.withValues(alpha: 0.22),
         ),
       ),
-      child: Text('$label: $displayValue', style: theme.textTheme.bodySmall),
+      child: Text('$label: $value', style: theme.textTheme.bodySmall),
     );
   }
 }

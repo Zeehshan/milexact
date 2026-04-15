@@ -9,19 +9,31 @@ class PresetEditorDialog extends StatefulWidget {
   const PresetEditorDialog({
     super.key,
     this.initialName,
-    this.initialSizeValue,
-    this.initialUnit,
+    this.initialHeightValue,
+    this.initialHeightUnit,
+    this.initialWidthValue,
+    this.initialWidthUnit,
+    this.initialSupportsMetric,
+    this.initialSupportsImperial,
     required this.onSave,
   });
 
   final String? initialName;
-  final double? initialSizeValue;
-  final MeasurementUnit? initialUnit;
-  final Future<void> Function(
-    String name,
-    String sizeValue,
-    MeasurementUnit unit,
-  )
+  final double? initialHeightValue;
+  final UnitType? initialHeightUnit;
+  final double? initialWidthValue;
+  final UnitType? initialWidthUnit;
+  final bool? initialSupportsMetric;
+  final bool? initialSupportsImperial;
+  final Future<void> Function({
+    required String name,
+    required String heightValue,
+    required UnitType heightUnit,
+    required String widthValue,
+    required UnitType widthUnit,
+    required bool supportsMetric,
+    required bool supportsImperial,
+  })
   onSave;
 
   @override
@@ -30,8 +42,12 @@ class PresetEditorDialog extends StatefulWidget {
 
 class _PresetEditorDialogState extends State<PresetEditorDialog> {
   late final TextEditingController _nameController;
-  late final TextEditingController _sizeController;
-  late MeasurementUnit _selectedUnit;
+  late final TextEditingController _heightController;
+  late final TextEditingController _widthController;
+  late UnitType _heightUnit;
+  late UnitType _widthUnit;
+  late bool _supportsMetric;
+  late bool _supportsImperial;
   String? _errorText;
   bool _saving = false;
 
@@ -39,16 +55,23 @@ class _PresetEditorDialogState extends State<PresetEditorDialog> {
   void initState() {
     super.initState();
     _nameController = TextEditingController(text: widget.initialName ?? '');
-    _sizeController = TextEditingController(
-      text: widget.initialSizeValue?.toString() ?? '',
+    _heightController = TextEditingController(
+      text: widget.initialHeightValue?.toString() ?? '',
     );
-    _selectedUnit = widget.initialUnit ?? MeasurementUnit.meter;
+    _widthController = TextEditingController(
+      text: widget.initialWidthValue?.toString() ?? '',
+    );
+    _heightUnit = widget.initialHeightUnit ?? UnitType.meter;
+    _widthUnit = widget.initialWidthUnit ?? UnitType.meter;
+    _supportsMetric = widget.initialSupportsMetric ?? true;
+    _supportsImperial = widget.initialSupportsImperial ?? true;
   }
 
   @override
   void dispose() {
     _nameController.dispose();
-    _sizeController.dispose();
+    _heightController.dispose();
+    _widthController.dispose();
     super.dispose();
   }
 
@@ -60,9 +83,13 @@ class _PresetEditorDialogState extends State<PresetEditorDialog> {
 
     try {
       await widget.onSave(
-        _nameController.text,
-        _sizeController.text,
-        _selectedUnit,
+        name: _nameController.text,
+        heightValue: _heightController.text,
+        heightUnit: _heightUnit,
+        widthValue: _widthController.text,
+        widthUnit: _widthUnit,
+        supportsMetric: _supportsMetric,
+        supportsImperial: _supportsImperial,
       );
       if (!mounted) {
         return;
@@ -88,43 +115,104 @@ class _PresetEditorDialogState extends State<PresetEditorDialog> {
     return AlertDialog(
       title: Text(isEditing ? 'Edit Preset' : 'Add Preset'),
       content: SizedBox(
-        width: 380,
+        width: 420,
         child: SingleChildScrollView(
           child: Column(
-            mainAxisSize: MainAxisSize.min,
             crossAxisAlignment: CrossAxisAlignment.start,
+            mainAxisSize: MainAxisSize.min,
             children: [
               LabeledTextField(
                 controller: _nameController,
-                label: 'Target Name',
-                hint: '10 in Plate, Sedan Width...',
+                label: 'Preset Name',
+                hint: 'IPSC A-Zone, 18 inch Steel...',
               ),
               const SizedBox(height: AppSpacing.md),
-              LabeledTextField(
-                controller: _sizeController,
-                label: 'Target Size',
-                hint: 'Enter size',
-                errorText: _errorText,
-                keyboardType: const TextInputType.numberWithOptions(
-                  decimal: true,
-                ),
-                inputFormatters: [
-                  FilteringTextInputFormatter.allow(RegExp(r'^\d*\.?\d*$')),
+              Row(
+                children: [
+                  Expanded(
+                    child: LabeledTextField(
+                      controller: _heightController,
+                      label: 'Height',
+                      hint: 'Height',
+                      keyboardType: const TextInputType.numberWithOptions(
+                        decimal: true,
+                      ),
+                      inputFormatters: [
+                        FilteringTextInputFormatter.allow(
+                          RegExp(r'^\d*\.?\d*$'),
+                        ),
+                      ],
+                      errorText: _errorText,
+                    ),
+                  ),
+                  const SizedBox(width: AppSpacing.sm),
+                  Expanded(
+                    child: LabeledTextField(
+                      controller: _widthController,
+                      label: 'Width',
+                      hint: 'Width',
+                      keyboardType: const TextInputType.numberWithOptions(
+                        decimal: true,
+                      ),
+                      inputFormatters: [
+                        FilteringTextInputFormatter.allow(
+                          RegExp(r'^\d*\.?\d*$'),
+                        ),
+                      ],
+                    ),
+                  ),
                 ],
               ),
               const SizedBox(height: AppSpacing.md),
               Text(
-                'Default Unit',
+                'Height Unit',
                 style: Theme.of(context).textTheme.titleMedium,
               ),
               const SizedBox(height: AppSpacing.xs),
-              SelectorChips<MeasurementUnit>(
-                options: MeasurementUnit.values,
-                selectedValue: _selectedUnit,
+              SelectorChips<UnitType>(
+                options: UnitType.values,
+                selectedValue: _heightUnit,
                 labelBuilder: (unit) => unit.shortLabel.toUpperCase(),
                 onSelected: (unit) {
                   setState(() {
-                    _selectedUnit = unit;
+                    _heightUnit = unit;
+                  });
+                },
+              ),
+              const SizedBox(height: AppSpacing.md),
+              Text(
+                'Width Unit',
+                style: Theme.of(context).textTheme.titleMedium,
+              ),
+              const SizedBox(height: AppSpacing.xs),
+              SelectorChips<UnitType>(
+                options: UnitType.values,
+                selectedValue: _widthUnit,
+                labelBuilder: (unit) => unit.shortLabel.toUpperCase(),
+                onSelected: (unit) {
+                  setState(() {
+                    _widthUnit = unit;
+                  });
+                },
+              ),
+              const SizedBox(height: AppSpacing.md),
+              SwitchListTile.adaptive(
+                contentPadding: EdgeInsets.zero,
+                title: const Text('Supports Metric'),
+                value: _supportsMetric,
+                onChanged: (value) {
+                  setState(() {
+                    _supportsMetric = value;
+                  });
+                },
+              ),
+              SwitchListTile.adaptive(
+                contentPadding: EdgeInsets.zero,
+                title: const Text('Supports Imperial'),
+                value: _supportsImperial,
+                onChanged: (value) {
+                  setState(() {
+                    _supportsImperial = value;
                   });
                 },
               ),

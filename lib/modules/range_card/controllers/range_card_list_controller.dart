@@ -20,11 +20,10 @@ class RangeCardListController extends GetxController {
     return entries
         .where((entry) {
           return entry.targetName.toLowerCase().contains(query) ||
-              entry.notes.toLowerCase().contains(query) ||
-              entry.dope.toLowerCase().contains(query) ||
-              entry.windFull.toLowerCase().contains(query) ||
-              entry.windHalf.toLowerCase().contains(query) ||
-              entry.windQuarter.toLowerCase().contains(query);
+              entry.dopeValue.toLowerCase().contains(query) ||
+              entry.windDirectionClock.toLowerCase().contains(query) ||
+              entry.targetPlacementLabel.toLowerCase().contains(query) ||
+              entry.terrainNotes.toLowerCase().contains(query);
         })
         .toList(growable: false);
   }
@@ -33,12 +32,12 @@ class RangeCardListController extends GetxController {
     searchQuery.value = value;
   }
 
+  void openEntry(RangeCardEntry entry) {
+    Get.toNamed(AppRoutes.rangeCardEdit, arguments: entry);
+  }
+
   Future<void> deleteEntry(String entryId) async {
     await _repository.delete(entryId);
     Get.snackbar('Deleted', 'Range card entry removed.');
-  }
-
-  void openEntry(RangeCardEntry entry) {
-    Get.toNamed(AppRoutes.rangeCardEdit, arguments: entry);
   }
 }

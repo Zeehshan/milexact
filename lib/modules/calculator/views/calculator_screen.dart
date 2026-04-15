@@ -4,7 +4,9 @@ import 'package:get/get.dart';
 import 'package:milexact/app/routes/app_routes.dart';
 import 'package:milexact/data/models/enums.dart';
 import 'package:milexact/modules/calculator/controllers/calculator_controller.dart';
+import 'package:milexact/modules/calculator/widgets/reticle_profile_picker.dart';
 import 'package:milexact/modules/calculator/widgets/result_card.dart';
+import 'package:milexact/modules/calculator/widgets/reticle_measurement_panel.dart';
 import 'package:milexact/shared/constants/app_spacing.dart';
 import 'package:milexact/shared/utils/formatters.dart';
 import 'package:milexact/shared/widgets/empty_state_view.dart';
@@ -31,6 +33,7 @@ class CalculatorScreen extends GetView<CalculatorController> {
         final categories = controller.categories.toList(growable: false);
         final presets = controller.availablePresets;
         final selectedPresetId = controller.selectedPresetId.value;
+        final selectedPreset = controller.selectedPreset;
 
         return SingleChildScrollView(
           padding: AppSpacing.screenPadding,
@@ -43,22 +46,24 @@ class CalculatorScreen extends GetView<CalculatorController> {
               ),
               const SizedBox(height: AppSpacing.md),
               SectionCard(
-                child: Row(
+                child: Wrap(
+                  spacing: AppSpacing.sm,
+                  runSpacing: AppSpacing.sm,
                   children: [
-                    Expanded(
-                      child: OutlinedButton.icon(
-                        onPressed: controller.openRangeCard,
-                        icon: const Icon(Icons.view_agenda_rounded),
-                        label: const Text('Open Range Card'),
-                      ),
+                    FilledButton.tonalIcon(
+                      onPressed: controller.openRangeCard,
+                      icon: const Icon(Icons.view_agenda_rounded),
+                      label: const Text('Range Card'),
                     ),
-                    const SizedBox(width: AppSpacing.sm),
-                    Expanded(
-                      child: OutlinedButton.icon(
-                        onPressed: controller.openPresetManager,
-                        icon: const Icon(Icons.category_rounded),
-                        label: const Text('Manage Presets'),
-                      ),
+                    FilledButton.tonalIcon(
+                      onPressed: controller.openDopeProfiles,
+                      icon: const Icon(Icons.straighten_rounded),
+                      label: const Text('DOPE'),
+                    ),
+                    FilledButton.tonalIcon(
+                      onPressed: controller.openVisualRangeCard,
+                      icon: const Icon(Icons.explore_rounded),
+                      label: const Text('Visual Card'),
                     ),
                   ],
                 ),
@@ -68,7 +73,7 @@ class CalculatorScreen extends GetView<CalculatorController> {
                 child: Column(
                   crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
-                    Text('Target Input', style: theme.textTheme.titleLarge),
+                    Text('Target Setup', style: theme.textTheme.titleLarge),
                     const SizedBox(height: AppSpacing.sm),
                     SelectorChips<TargetInputMode>(
                       options: TargetInputMode.values,
@@ -78,16 +83,30 @@ class CalculatorScreen extends GetView<CalculatorController> {
                     ),
                     const SizedBox(height: AppSpacing.md),
                     if (controller.isPresetMode) ...[
+                      Row(
+                        children: [
+                          Expanded(
+                            child: Text(
+                              'Quick Presets',
+                              style: theme.textTheme.titleMedium,
+                            ),
+                          ),
+                          OutlinedButton.icon(
+                            onPressed: controller.openQuickPresets,
+                            icon: const Icon(Icons.category_rounded),
+                            label: const Text('Browse'),
+                          ),
+                        ],
+                      ),
+                      const SizedBox(height: AppSpacing.sm),
                       if (categories.isEmpty)
                         const EmptyStateView(
-                          title: 'No target categories',
+                          title: 'No quick presets',
                           description:
-                              'Add categories and presets in the manager to use saved target references.',
+                              'Create categories and presets to speed up field ranging.',
                           icon: Icons.category_outlined,
                         )
                       else ...[
-                        Text('Category', style: theme.textTheme.titleMedium),
-                        const SizedBox(height: AppSpacing.xs),
                         SelectorChips<String>(
                           options: categories
                               .map((category) => category.id)
@@ -101,15 +120,11 @@ class CalculatorScreen extends GetView<CalculatorController> {
                           onSelected: controller.setCategory,
                         ),
                         const SizedBox(height: AppSpacing.md),
-                        Text(
-                          'Preset Target',
-                          style: theme.textTheme.titleMedium,
-                        ),
-                        const SizedBox(height: AppSpacing.xs),
                         DropdownButtonFormField<String>(
                           key: ValueKey(
                             '${controller.selectedCategoryId.value}-$selectedPresetId',
                           ),
+                          isExpanded: true,
                           initialValue:
                               presets.any(
                                 (preset) => preset.id == selectedPresetId,
@@ -121,7 +136,21 @@ class CalculatorScreen extends GetView<CalculatorController> {
                                 (preset) => DropdownMenuItem<String>(
                                   value: preset.id,
                                   child: Text(
-                                    '${preset.name} • ${AppFormatters.targetSize(preset.sizeValue, preset.sizeUnit)}',
+                                    '${preset.name} • H ${AppFormatters.targetSize(preset.heightValue, preset.heightUnit)} • W ${AppFormatters.targetSize(preset.widthValue, preset.widthUnit)}',
+                                    maxLines: 1,
+                                    overflow: TextOverflow.ellipsis,
+                                  ),
+                                ),
+                              )
+                              .toList(growable: false),
+                          selectedItemBuilder: (context) => presets
+                              .map(
+                                (preset) => Align(
+                                  alignment: Alignment.centerLeft,
+                                  child: Text(
+                                    '${preset.name} • H ${AppFormatters.targetSize(preset.heightValue, preset.heightUnit)}',
+                                    maxLines: 1,
+                                    overflow: TextOverflow.ellipsis,
                                   ),
                                 ),
                               )
@@ -137,10 +166,10 @@ class CalculatorScreen extends GetView<CalculatorController> {
                             hintText: 'Select a preset',
                           ),
                         ),
-                        if (controller.selectedPreset != null) ...[
+                        if (selectedPreset != null) ...[
                           const SizedBox(height: AppSpacing.sm),
                           Text(
-                            'Preset size: ${AppFormatters.targetSize(controller.selectedPreset!.sizeValue, controller.selectedPreset!.sizeUnit)}',
+                            'Preset dimensions: H ${AppFormatters.targetSize(selectedPreset.heightValue, selectedPreset.heightUnit)} • W ${AppFormatters.targetSize(selectedPreset.widthValue, selectedPreset.widthUnit)}',
                             style: theme.textTheme.bodyMedium,
                           ),
                         ],
@@ -152,25 +181,59 @@ class CalculatorScreen extends GetView<CalculatorController> {
                         hint: 'Custom target label',
                       ),
                       const SizedBox(height: AppSpacing.md),
-                      LabeledTextField(
-                        controller: controller.manualTargetSizeController,
-                        label: 'Target Size',
-                        hint: 'Enter target size',
-                        keyboardType: const TextInputType.numberWithOptions(
-                          decimal: true,
-                        ),
-                        inputFormatters: [_decimalFormatter],
+                      Row(
+                        children: [
+                          Expanded(
+                            child: LabeledTextField(
+                              controller:
+                                  controller.manualTargetHeightController,
+                              label: 'Height',
+                              hint: 'Height',
+                              keyboardType:
+                                  const TextInputType.numberWithOptions(
+                                    decimal: true,
+                                  ),
+                              inputFormatters: [_decimalFormatter],
+                            ),
+                          ),
+                          const SizedBox(width: AppSpacing.sm),
+                          Expanded(
+                            child: LabeledTextField(
+                              controller:
+                                  controller.manualTargetWidthController,
+                              label: 'Width',
+                              hint: 'Width',
+                              keyboardType:
+                                  const TextInputType.numberWithOptions(
+                                    decimal: true,
+                                  ),
+                              inputFormatters: [_decimalFormatter],
+                            ),
+                          ),
+                        ],
                       ),
                       const SizedBox(height: AppSpacing.md),
                       Text('Target Unit', style: theme.textTheme.titleMedium),
                       const SizedBox(height: AppSpacing.xs),
-                      SelectorChips<MeasurementUnit>(
-                        options: MeasurementUnit.values,
+                      SelectorChips<UnitType>(
+                        options: UnitType.values,
                         selectedValue: controller.selectedTargetUnit.value,
                         labelBuilder: (unit) => unit.shortLabel.toUpperCase(),
                         onSelected: controller.setTargetUnit,
                       ),
                     ],
+                    const SizedBox(height: AppSpacing.md),
+                    Text(
+                      'Reference Dimension',
+                      style: theme.textTheme.titleMedium,
+                    ),
+                    const SizedBox(height: AppSpacing.xs),
+                    SelectorChips<TargetDimensionType>(
+                      options: TargetDimensionType.values,
+                      selectedValue: controller.referenceDimension.value,
+                      labelBuilder: (dimension) => dimension.label,
+                      onSelected: controller.setReferenceDimension,
+                    ),
                   ],
                 ),
               ),
@@ -179,30 +242,11 @@ class CalculatorScreen extends GetView<CalculatorController> {
                 child: Column(
                   crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
-                    Text('Ranging Setup', style: theme.textTheme.titleLarge),
-                    const SizedBox(height: AppSpacing.sm),
                     Text(
-                      'Measurement System',
-                      style: theme.textTheme.titleMedium,
+                      'Reticle Measurement',
+                      style: theme.textTheme.titleLarge,
                     ),
-                    const SizedBox(height: AppSpacing.xs),
-                    SelectorChips<MeasurementSystem>(
-                      options: MeasurementSystem.values,
-                      selectedValue: controller.measurementSystem.value,
-                      labelBuilder: (system) => system.label,
-                      onSelected: controller.setMeasurementSystem,
-                    ),
-                    const SizedBox(height: AppSpacing.md),
-                    LabeledTextField(
-                      controller: controller.reticleReadingController,
-                      label: 'Reticle Reading',
-                      hint: 'Enter MIL or MRAD reading',
-                      keyboardType: const TextInputType.numberWithOptions(
-                        decimal: true,
-                      ),
-                      inputFormatters: [_decimalFormatter],
-                    ),
-                    const SizedBox(height: AppSpacing.md),
+                    const SizedBox(height: AppSpacing.sm),
                     Text('Reticle Type', style: theme.textTheme.titleMedium),
                     const SizedBox(height: AppSpacing.xs),
                     SelectorChips<ReticleType>(
@@ -212,19 +256,79 @@ class CalculatorScreen extends GetView<CalculatorController> {
                       onSelected: controller.setReticleType,
                     ),
                     const SizedBox(height: AppSpacing.md),
-                    Text('Distance Output', style: theme.textTheme.titleMedium),
+                    Text('Reticle Format', style: theme.textTheme.titleMedium),
                     const SizedBox(height: AppSpacing.xs),
-                    SelectorChips<DistanceOutputPreference>(
-                      options: DistanceOutputPreference.values,
-                      selectedValue: controller.outputPreference.value,
+                    ReticleProfilePicker(
+                      selectedProfile: controller.selectedReticleProfile.value,
+                      reticleType: controller.selectedReticleType.value,
+                      referenceDimension: controller.referenceDimension.value,
+                      onSelected: controller.setReticleProfile,
+                    ),
+                    const SizedBox(height: AppSpacing.md),
+                    ReticleMeasurementPanel(
+                      referenceDimension: controller.referenceDimension.value,
+                      handleFraction: controller.reticleHandleFraction.value,
+                      reticleType: controller.selectedReticleType.value,
+                      reticleProfile: controller.selectedReticleProfile.value,
+                      readingLabel: controller.reticleReadingInput.value,
+                      onInteraction: (localPosition, size) {
+                        controller.updateReticleFromLocalPosition(
+                          localPosition: localPosition,
+                          canvasSize: size,
+                        );
+                      },
+                    ),
+                    const SizedBox(height: AppSpacing.sm),
+                    Text(
+                      'Using ${controller.selectedReticleProfile.value.label}. Drag the guide to match the target ${controller.referenceDimension.value.label.toLowerCase()} span in your reticle.',
+                      style: theme.textTheme.bodySmall,
+                    ),
+                    const SizedBox(height: AppSpacing.md),
+                    LabeledTextField(
+                      controller: controller.reticleReadingController,
+                      label: 'Reticle Reading',
+                      hint:
+                          'Enter ${controller.selectedReticleType.value.label} reading',
+                      keyboardType: const TextInputType.numberWithOptions(
+                        decimal: true,
+                      ),
+                      inputFormatters: [_decimalFormatter],
+                    ),
+                  ],
+                ),
+              ),
+              const SizedBox(height: AppSpacing.md),
+              SectionCard(
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Text(
+                      'Display & Formula',
+                      style: theme.textTheme.titleLarge,
+                    ),
+                    const SizedBox(height: AppSpacing.sm),
+                    Text('Formula Branch', style: theme.textTheme.titleMedium),
+                    const SizedBox(height: AppSpacing.xs),
+                    SelectorChips<MeasurementSystem>(
+                      options: MeasurementSystem.values,
+                      selectedValue: controller.measurementSystem.value,
+                      labelBuilder: (system) => system.label,
+                      onSelected: controller.setMeasurementSystem,
+                    ),
+                    const SizedBox(height: AppSpacing.md),
+                    Text('Display Units', style: theme.textTheme.titleMedium),
+                    const SizedBox(height: AppSpacing.xs),
+                    SelectorChips<DistanceDisplayPreference>(
+                      options: DistanceDisplayPreference.values,
+                      selectedValue: controller.displayPreference.value,
                       labelBuilder: (preference) => preference.label,
-                      onSelected: controller.setOutputPreference,
+                      onSelected: controller.setDisplayPreference,
                     ),
                     const SizedBox(height: AppSpacing.md),
                     Text(
-                      controller.autoCalculateEnabled.value
-                          ? 'Live calculation is enabled in settings. Use the button to force a refresh anytime.'
-                          : 'Auto-calculate is disabled. Use the button below to solve distance.',
+                      controller.liveCalculationEnabled.value
+                          ? 'Live calculation is enabled. Drag the reticle or edit fields to refresh instantly.'
+                          : 'Live calculation is off. Use the button below to calculate after changing inputs.',
                       style: theme.textTheme.bodySmall,
                     ),
                   ],
@@ -235,18 +339,18 @@ class CalculatorScreen extends GetView<CalculatorController> {
                 onPressed: controller.calculate,
                 icon: const Icon(Icons.calculate_rounded),
                 label: Text(
-                  controller.autoCalculateEnabled.value
+                  controller.liveCalculationEnabled.value
                       ? 'Refresh Distance'
                       : 'Calculate Distance',
                 ),
               ),
               const SizedBox(height: AppSpacing.sm),
               FilledButton.tonalIcon(
-                onPressed: controller.result.value == null
-                    ? null
-                    : controller.addToRangeCard,
+                onPressed: controller.canSaveToRangeCard
+                    ? controller.addToRangeCard
+                    : null,
                 icon: const Icon(Icons.playlist_add_rounded),
-                label: const Text('Add to Range Card'),
+                label: const Text('Save to Range Card'),
               ),
             ],
           ),

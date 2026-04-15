@@ -12,8 +12,18 @@ class PresetsRepository extends GetxService {
   final RxList<TargetPreset> presets = <TargetPreset>[].obs;
 
   Future<PresetsRepository> init() async {
-    if (_storage.categoriesBox.isEmpty && _storage.presetsBox.isEmpty) {
-      await _seedDefaults();
+    if (_storage.categoriesBox.isEmpty) {
+      await _storage.categoriesBox.putAll({
+        for (final category in SeedData.defaultCategories())
+          category.id: category.toJson(),
+      });
+    }
+
+    if (_storage.presetsBox.isEmpty) {
+      await _storage.presetsBox.putAll({
+        for (final preset in SeedData.defaultPresets())
+          preset.id: preset.toJson(),
+      });
     }
 
     _reload();
@@ -65,17 +75,6 @@ class PresetsRepository extends GetxService {
   Future<void> deletePreset(String presetId) async {
     await _storage.presetsBox.delete(presetId);
     _reload();
-  }
-
-  Future<void> _seedDefaults() async {
-    await _storage.categoriesBox.putAll({
-      for (final category in SeedData.defaultCategories())
-        category.id: category.toJson(),
-    });
-    await _storage.presetsBox.putAll({
-      for (final preset in SeedData.defaultPresets())
-        preset.id: preset.toJson(),
-    });
   }
 
   void _reload() {
