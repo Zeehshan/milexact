@@ -2,10 +2,8 @@ import 'package:flutter/material.dart';
 import 'package:get/get.dart';
 import 'package:milexact/app/routes/app_routes.dart';
 import 'package:milexact/data/models/dope_profile.dart';
-import 'package:milexact/data/models/dope_profile_entry.dart';
 import 'package:milexact/data/models/enums.dart';
 import 'package:milexact/modules/dope/controllers/dope_profiles_controller.dart';
-import 'package:milexact/modules/dope/widgets/dope_profile_editor_dialog.dart';
 import 'package:milexact/shared/constants/app_spacing.dart';
 import 'package:milexact/shared/utils/formatters.dart';
 import 'package:milexact/shared/widgets/empty_state_view.dart';
@@ -13,17 +11,20 @@ import 'package:milexact/shared/widgets/labeled_text_field.dart';
 import 'package:milexact/shared/widgets/tactical_scaffold.dart';
 
 class DopeProfilesScreen extends GetView<DopeProfilesController> {
-  const DopeProfilesScreen({super.key});
+  const DopeProfilesScreen({super.key, this.showBottomNav = true});
+
+  final bool showBottomNav;
 
   @override
   Widget build(BuildContext context) {
     return TacticalScaffold(
       title: 'DOPE Profiles',
       currentRoute: AppRoutes.dopeProfiles,
+      showBottomNav: showBottomNav,
       actions: [
         IconButton(
           tooltip: 'Add Profile',
-          onPressed: _showEditor,
+          onPressed: _openEditor,
           icon: const Icon(Icons.add_circle_outline_rounded),
         ),
       ],
@@ -47,7 +48,7 @@ class DopeProfilesScreen extends GetView<DopeProfilesController> {
                         'Create a manual DOPE library for your rifles. Nothing here is calculated automatically.',
                     icon: Icons.straighten_outlined,
                     actionLabel: 'Add Profile',
-                    onAction: _showEditor,
+                    onAction: _openEditor,
                   );
                 }
 
@@ -59,7 +60,7 @@ class DopeProfilesScreen extends GetView<DopeProfilesController> {
                     final profile = profiles[index];
                     return _DopeProfileTile(
                       profile: profile,
-                      onEdit: () => _showEditor(profile: profile),
+                      onEdit: () => _openEditor(profile: profile),
                       onDelete: () => _confirmDelete(profile),
                       onSetActive: () =>
                           controller.setActiveProfile(profile.id),
@@ -74,34 +75,8 @@ class DopeProfilesScreen extends GetView<DopeProfilesController> {
     );
   }
 
-  Future<void> _showEditor({DopeProfile? profile}) async {
-    await Get.dialog<void>(
-      DopeProfileEditorDialog(
-        initialRifleName: profile?.rifleName,
-        initialCaliber: profile?.caliber,
-        initialBulletGrain: profile?.bulletGrain,
-        initialVelocityFps: profile?.velocityFps,
-        initialEntries: profile?.entries,
-        initialIsActive: profile?.isActive,
-        onSave:
-            ({
-              required String rifleName,
-              required String caliber,
-              required String bulletGrain,
-              required String velocityFps,
-              required List<DopeProfileEntry> entries,
-              required bool isActive,
-            }) => controller.saveProfile(
-              profileId: profile?.id,
-              rifleName: rifleName,
-              caliber: caliber,
-              bulletGrain: bulletGrain,
-              velocityFps: velocityFps,
-              entries: entries,
-              isActive: isActive,
-            ),
-      ),
-    );
+  Future<void> _openEditor({DopeProfile? profile}) async {
+    await Get.toNamed(AppRoutes.dopeProfileEdit, arguments: profile);
   }
 
   Future<void> _confirmDelete(DopeProfile profile) async {

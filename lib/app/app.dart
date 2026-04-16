@@ -13,7 +13,7 @@ class MilExactApp extends StatelessWidget {
       debugShowCheckedModeBanner: false,
       title: 'MilExact',
       theme: AppTheme.darkTheme,
-      initialRoute: AppRoutes.calculator,
+      initialRoute: AppRoutes.home,
       getPages: AppPages.pages,
     );
   }

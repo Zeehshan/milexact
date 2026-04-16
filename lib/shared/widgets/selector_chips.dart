@@ -16,19 +16,22 @@ class SelectorChips<T> extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    return Wrap(
-      spacing: 8,
-      runSpacing: 8,
-      children: options
-          .map(
-            (option) => ChoiceChip(
-              label: Text(labelBuilder(option)),
-              selected: option == selectedValue,
-              showCheckmark: false,
-              onSelected: (_) => onSelected(option),
-            ),
-          )
-          .toList(growable: false),
+    return SingleChildScrollView(
+      scrollDirection: Axis.horizontal,
+      child: Row(
+        spacing: 8,
+        // runSpacing: 8,
+        children: options
+            .map(
+              (option) => ChoiceChip(
+                label: Text(labelBuilder(option)),
+                selected: option == selectedValue,
+                showCheckmark: false,
+                onSelected: (_) => onSelected(option),
+              ),
+            )
+            .toList(growable: false),
+      ),
     );
   }
 }

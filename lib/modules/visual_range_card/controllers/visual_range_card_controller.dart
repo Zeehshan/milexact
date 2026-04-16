@@ -20,9 +20,11 @@ class VisualRangeCardController extends GetxController {
 
   final currentCard = Rxn<VisualRangeCardState>();
   final editorMode = VisualEditorMode.marker.obs;
+  final isDrawModeEnabled = false.obs;
   final draftTerrainPoints = <VisualPoint>[].obs;
   final draggingMarkerId = RxnString();
   final _history = <VisualRangeCardState>[];
+  bool _isTerrainDrawing = false;
 
   RangeCardEntry? linkedEntry;
 
@@ -48,6 +50,16 @@ class VisualRangeCardController extends GetxController {
   void setEditorMode(VisualEditorMode mode) {
     editorMode.value = mode;
     draggingMarkerId.value = null;
+    _isTerrainDrawing = false;
+    draftTerrainPoints.clear();
+  }
+
+  void setDrawModeEnabled(bool isEnabled) {
+    isDrawModeEnabled.value = isEnabled;
+    if (!isEnabled) {
+      draggingMarkerId.value = null;
+      _isTerrainDrawing = false;
+    }
   }
 
   void toggleArcLines(bool enabled) {
@@ -63,6 +75,12 @@ class VisualRangeCardController extends GetxController {
   }
 
   void handleTap({required Size size, required Offset localPosition}) {
+    if (!isDrawModeEnabled.value) {
+      return;
+    }
+    if (_isTerrainDrawing) {
+      return;
+    }
     if (!_visualRangeCardService.isInsidePlot(
       localPosition: localPosition,
       size: size,
@@ -75,16 +93,25 @@ class VisualRangeCardController extends GetxController {
       return;
     }
 
-    draftTerrainPoints.add(
-      _visualRangeCardService.normalizedPointFromOffset(
-        localPosition: localPosition,
-        size: size,
-      ),
-    );
+    _appendTerrainPoint(size: size, localPosition: localPosition);
   }
 
   void handlePanStart({required Size size, required Offset localPosition}) {
-    if (editorMode.value != VisualEditorMode.marker) {
+    if (!isDrawModeEnabled.value) {
+      return;
+    }
+    if (!_visualRangeCardService.isInsidePlot(
+      localPosition: localPosition,
+      size: size,
+    )) {
+      return;
+    }
+
+    if (editorMode.value.isTerrain) {
+      _snapshot();
+      _isTerrainDrawing = true;
+      draftTerrainPoints.clear();
+      _appendTerrainPoint(size: size, localPosition: localPosition);
       return;
     }
 
@@ -102,6 +129,22 @@ class VisualRangeCardController extends GetxController {
   }
 
   void handlePanUpdate({required Size size, required Offset localPosition}) {
+    if (!isDrawModeEnabled.value) {
+      return;
+    }
+    if (editorMode.value.isTerrain) {
+      if (!_isTerrainDrawing ||
+          !_visualRangeCardService.isInsidePlot(
+            localPosition: localPosition,
+            size: size,
+          )) {
+        return;
+      }
+
+      _appendTerrainPoint(size: size, localPosition: localPosition);
+      return;
+    }
+
     final markerId = draggingMarkerId.value;
     final card = currentCard.value;
     if (markerId == null || card == null) {
@@ -142,17 +185,38 @@ class VisualRangeCardController extends GetxController {
   }
 
   void handlePanEnd() {
+    if (!isDrawModeEnabled.value) {
+      draggingMarkerId.value = null;
+      _isTerrainDrawing = false;
+      return;
+    }
+    if (_isTerrainDrawing) {
+      _isTerrainDrawing = false;
+      if (draftTerrainPoints.length >= 2) {
+        _commitTerrain(shouldSnapshot: false);
+      } else {
+        draftTerrainPoints.clear();
+      }
+      return;
+    }
+
     draggingMarkerId.value = null;
   }
 
   void commitTerrain() {
+    _commitTerrain();
+  }
+
+  void _commitTerrain({bool shouldSnapshot = true}) {
     final terrainType = editorMode.value.terrainType;
     final card = currentCard.value;
     if (terrainType == null || card == null || draftTerrainPoints.length < 2) {
       return;
     }
 
-    _snapshot();
+    if (shouldSnapshot) {
+      _snapshot();
+    }
     final terrainItem = TerrainItem(
       id: IdGenerator.generate(prefix: 'terrain'),
       type: terrainType,
@@ -363,6 +427,28 @@ class VisualRangeCardController extends GetxController {
       return;
     }
     _history.add(VisualRangeCardState.fromJson(card.toJson()));
+  }
+
+  void _appendTerrainPoint({
+    required Size size,
+    required Offset localPosition,
+  }) {
+    if (draftTerrainPoints.isNotEmpty) {
+      final lastOffset = _visualRangeCardService.offsetFromNormalizedPoint(
+        point: draftTerrainPoints.last,
+        size: size,
+      );
+      if ((lastOffset - localPosition).distance < 8) {
+        return;
+      }
+    }
+
+    draftTerrainPoints.add(
+      _visualRangeCardService.normalizedPointFromOffset(
+        localPosition: localPosition,
+        size: size,
+      ),
+    );
   }
 
   VisualRangeCardState _blankCard() {

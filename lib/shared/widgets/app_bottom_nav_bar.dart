@@ -1,11 +1,17 @@
 import 'package:flutter/material.dart';
 import 'package:get/get.dart';
 import 'package:milexact/app/routes/app_routes.dart';
+import 'package:milexact/modules/app_shell/controllers/app_shell_controller.dart';
 
 class AppBottomNavBar extends StatelessWidget {
-  const AppBottomNavBar({super.key, required this.currentRoute});
+  const AppBottomNavBar({
+    super.key,
+    required this.currentRoute,
+    this.onRouteSelected,
+  });
 
   final String currentRoute;
+  final ValueChanged<String>? onRouteSelected;
 
   static const _items = <_NavItem>[
     _NavItem(
@@ -54,7 +60,18 @@ class AppBottomNavBar extends StatelessWidget {
         if (route == currentRoute) {
           return;
         }
-        Get.offNamed(route);
+        if (onRouteSelected != null) {
+          onRouteSelected!(route);
+          return;
+        }
+        if (Get.isRegistered<AppShellController>()) {
+          Get.find<AppShellController>().selectRoute(route);
+          if (Get.currentRoute != AppRoutes.home) {
+            Get.until((page) => page.settings.name == AppRoutes.home);
+          }
+          return;
+        }
+        Get.offNamed(AppRoutes.home, arguments: route);
       },
     );
   }

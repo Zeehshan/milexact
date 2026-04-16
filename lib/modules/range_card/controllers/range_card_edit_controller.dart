@@ -7,6 +7,7 @@ import 'package:milexact/data/models/enums.dart';
 import 'package:milexact/data/models/range_card_entry.dart';
 import 'package:milexact/data/repositories/dope_profiles_repository.dart';
 import 'package:milexact/data/repositories/range_card_repository.dart';
+import 'package:milexact/modules/app_shell/controllers/app_shell_controller.dart';
 import 'package:milexact/shared/utils/id_generator.dart';
 
 class RangeCardEditController extends GetxController {
@@ -136,13 +137,13 @@ class RangeCardEditController extends GetxController {
 
     await _rangeCardRepository.upsert(updated);
     errorMessage.value = '';
-    Get.offNamed(AppRoutes.rangeCardList);
+    _returnToRangeCardList();
     Get.snackbar('Saved', 'Range card entry stored locally.');
   }
 
   Future<void> deleteEntry() async {
     await _rangeCardRepository.delete(entry.id);
-    Get.offNamed(AppRoutes.rangeCardList);
+    _returnToRangeCardList();
     Get.snackbar('Deleted', 'Range card entry removed.');
   }
 
@@ -192,5 +193,20 @@ class RangeCardEditController extends GetxController {
       createdAt: now,
       updatedAt: now,
     );
+  }
+
+  void _returnToRangeCardList() {
+    if (Get.isRegistered<AppShellController>()) {
+      Get.find<AppShellController>().selectRoute(AppRoutes.rangeCardList);
+      if ((Get.key.currentState?.canPop() ?? false) &&
+          Get.currentRoute != AppRoutes.home) {
+        Get.back<void>();
+        return;
+      }
+      Get.offNamed(AppRoutes.home, arguments: AppRoutes.rangeCardList);
+      return;
+    }
+
+    Get.offNamed(AppRoutes.rangeCardList);
   }
 }

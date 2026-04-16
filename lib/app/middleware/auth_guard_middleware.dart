@@ -16,7 +16,7 @@ class AuthGuardMiddleware extends GetMiddleware {
       return const RouteSettings(name: AppRoutes.signIn);
     }
     if (!requiresAuth && authService.isSignedIn) {
-      return const RouteSettings(name: AppRoutes.calculator);
+      return const RouteSettings(name: AppRoutes.home);
     }
 
     return null;

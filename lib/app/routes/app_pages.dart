@@ -1,6 +1,8 @@
 import 'package:get/get.dart';
 import 'package:milexact/app/middleware/auth_guard_middleware.dart';
 import 'package:milexact/app/routes/app_routes.dart';
+import 'package:milexact/modules/app_shell/bindings/app_shell_binding.dart';
+import 'package:milexact/modules/app_shell/views/app_shell_screen.dart';
 import 'package:milexact/modules/auth/bindings/forgot_password_binding.dart';
 import 'package:milexact/modules/auth/bindings/reset_password_binding.dart';
 import 'package:milexact/modules/auth/bindings/sign_in_binding.dart';
@@ -13,6 +15,8 @@ import 'package:milexact/modules/auth/views/sign_up_screen.dart';
 import 'package:milexact/modules/calculator/bindings/calculator_binding.dart';
 import 'package:milexact/modules/calculator/views/calculator_screen.dart';
 import 'package:milexact/modules/dope/bindings/dope_profiles_binding.dart';
+import 'package:milexact/modules/dope/bindings/dope_profile_edit_binding.dart';
+import 'package:milexact/modules/dope/views/dope_profile_edit_screen.dart';
 import 'package:milexact/modules/dope/views/dope_profiles_screen.dart';
 import 'package:milexact/modules/presets/bindings/preset_manager_binding.dart';
 import 'package:milexact/modules/presets/views/preset_manager_screen.dart';
@@ -27,6 +31,12 @@ import 'package:milexact/modules/visual_range_card/views/visual_range_card_scree
 
 class AppPages {
   static final pages = <GetPage<dynamic>>[
+    GetPage(
+      name: AppRoutes.home,
+      page: AppShellScreen.new,
+      binding: AppShellBinding(),
+      middlewares: [AuthGuardMiddleware(requiresAuth: true)],
+    ),
     GetPage(
       name: AppRoutes.signIn,
       page: SignInScreen.new,
@@ -84,6 +94,12 @@ class AppPages {
       name: AppRoutes.dopeProfiles,
       page: DopeProfilesScreen.new,
       binding: DopeProfilesBinding(),
+      middlewares: [AuthGuardMiddleware(requiresAuth: true)],
+    ),
+    GetPage(
+      name: AppRoutes.dopeProfileEdit,
+      page: DopeProfileEditScreen.new,
+      binding: DopeProfileEditBinding(),
       middlewares: [AuthGuardMiddleware(requiresAuth: true)],
     ),
     GetPage(

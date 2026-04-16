@@ -21,32 +21,59 @@ class EmptyStateView extends StatelessWidget {
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
 
-    return Center(
-      child: Padding(
-        padding: const EdgeInsets.all(AppSpacing.lg),
-        child: Column(
+    return LayoutBuilder(
+      builder: (context, constraints) {
+        final useCompactLayout =
+            constraints.hasBoundedHeight && constraints.maxHeight < 180;
+        final iconSize = useCompactLayout ? 32.0 : 44.0;
+        final outerPadding = useCompactLayout ? AppSpacing.md : AppSpacing.lg;
+        final blockSpacing = useCompactLayout ? AppSpacing.sm : AppSpacing.md;
+        final bodySpacing = useCompactLayout ? 6.0 : AppSpacing.xs;
+
+        final content = Column(
           mainAxisSize: MainAxisSize.min,
           children: [
-            Icon(icon, size: 44),
-            const SizedBox(height: AppSpacing.md),
+            Icon(icon, size: iconSize),
+            SizedBox(height: blockSpacing),
             Text(
               title,
-              style: theme.textTheme.titleLarge,
+              style: useCompactLayout
+                  ? theme.textTheme.titleMedium
+                  : theme.textTheme.titleLarge,
               textAlign: TextAlign.center,
             ),
-            const SizedBox(height: AppSpacing.xs),
+            SizedBox(height: bodySpacing),
             Text(
               description,
-              style: theme.textTheme.bodyMedium,
+              style: useCompactLayout
+                  ? theme.textTheme.bodySmall
+                  : theme.textTheme.bodyMedium,
               textAlign: TextAlign.center,
             ),
             if (actionLabel != null && onAction != null) ...[
-              const SizedBox(height: AppSpacing.md),
+              SizedBox(height: blockSpacing),
               FilledButton(onPressed: onAction, child: Text(actionLabel!)),
             ],
           ],
-        ),
-      ),
+        );
+
+        return SingleChildScrollView(
+          child: ConstrainedBox(
+            constraints: BoxConstraints(
+              minWidth: constraints.hasBoundedWidth ? constraints.maxWidth : 0,
+              minHeight: constraints.hasBoundedHeight
+                  ? constraints.maxHeight
+                  : 0,
+            ),
+            child: Center(
+              child: Padding(
+                padding: EdgeInsets.all(outerPadding),
+                child: content,
+              ),
+            ),
+          ),
+        );
+      },
     );
   }
 }

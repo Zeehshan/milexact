@@ -6,6 +6,9 @@ import 'package:milexact/services/visual_range_card_service.dart';
 class VisualRangeCardBinding extends Bindings {
   @override
   void dependencies() {
+    if (Get.isRegistered<VisualRangeCardController>()) {
+      return;
+    }
     Get.lazyPut<VisualRangeCardController>(
       () => VisualRangeCardController(
         Get.find<VisualRangeCardRepository>(),

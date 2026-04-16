@@ -44,65 +44,51 @@ class AuthCardLayout extends StatelessWidget {
                     ),
                   ],
                 ),
-                child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    Container(
-                      height: 3,
-                      decoration: const BoxDecoration(
-                        color: AppColors.primary,
-                        borderRadius: BorderRadius.vertical(
-                          top: Radius.circular(28),
+                child: Padding(
+                  padding: const EdgeInsets.fromLTRB(
+                    AppSpacing.lg,
+                    AppSpacing.lg,
+                    AppSpacing.lg,
+                    AppSpacing.lg,
+                  ),
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      if (backLabel != null && onBack != null) ...[
+                        TextButton.icon(
+                          onPressed: onBack,
+                          icon: const Icon(Icons.arrow_back_rounded),
+                          label: Text(backLabel!),
                         ),
-                      ),
-                    ),
-                    Padding(
-                      padding: const EdgeInsets.fromLTRB(
-                        AppSpacing.lg,
-                        AppSpacing.lg,
-                        AppSpacing.lg,
-                        AppSpacing.lg,
-                      ),
-                      child: Column(
-                        crossAxisAlignment: CrossAxisAlignment.start,
-                        children: [
-                          if (backLabel != null && onBack != null) ...[
-                            TextButton.icon(
-                              onPressed: onBack,
-                              icon: const Icon(Icons.arrow_back_rounded),
-                              label: Text(backLabel!),
+                        const SizedBox(height: AppSpacing.sm),
+                      ],
+                      if (header != null) ...[
+                        Center(child: header!),
+                        const SizedBox(height: AppSpacing.lg),
+                      ],
+                      Center(
+                        child: Column(
+                          children: [
+                            Text(
+                              title,
+                              style: theme.textTheme.headlineMedium,
+                              textAlign: TextAlign.center,
                             ),
                             const SizedBox(height: AppSpacing.sm),
-                          ],
-                          if (header != null) ...[
-                            Center(child: header!),
-                            const SizedBox(height: AppSpacing.lg),
-                          ],
-                          Center(
-                            child: Column(
-                              children: [
-                                Text(
-                                  title,
-                                  style: theme.textTheme.headlineMedium,
-                                  textAlign: TextAlign.center,
-                                ),
-                                const SizedBox(height: AppSpacing.sm),
-                                Text(
-                                  subtitle,
-                                  style: theme.textTheme.bodyLarge?.copyWith(
-                                    color: AppColors.textMuted,
-                                  ),
-                                  textAlign: TextAlign.center,
-                                ),
-                              ],
+                            Text(
+                              subtitle,
+                              style: theme.textTheme.bodyLarge?.copyWith(
+                                color: AppColors.textMuted,
+                              ),
+                              textAlign: TextAlign.center,
                             ),
-                          ),
-                          const SizedBox(height: AppSpacing.xl),
-                          child,
-                        ],
+                          ],
+                        ),
                       ),
-                    ),
-                  ],
+                      const SizedBox(height: AppSpacing.xl),
+                      child,
+                    ],
+                  ),
                 ),
               ),
             ),

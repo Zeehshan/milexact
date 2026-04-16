@@ -5,7 +5,6 @@ import 'package:milexact/data/models/enums.dart';
 import 'package:milexact/data/models/visual_range_card_state.dart';
 import 'package:milexact/data/models/visual_point.dart';
 import 'package:milexact/services/visual_range_card_service.dart';
-import 'package:milexact/shared/constants/app_spacing.dart';
 
 class VisualRangeCardCanvas extends StatelessWidget {
   const VisualRangeCardCanvas({
@@ -13,6 +12,7 @@ class VisualRangeCardCanvas extends StatelessWidget {
     required this.card,
     required this.draftTerrainPoints,
     required this.editorMode,
+    required this.interactionEnabled,
     required this.visualRangeCardService,
     required this.onTapDown,
     required this.onPanStart,
@@ -23,6 +23,7 @@ class VisualRangeCardCanvas extends StatelessWidget {
   final VisualRangeCardState card;
   final List<VisualPoint> draftTerrainPoints;
   final VisualEditorMode editorMode;
+  final bool interactionEnabled;
   final VisualRangeCardService visualRangeCardService;
   final void Function(Offset localPosition, Size size) onTapDown;
   final void Function(Offset localPosition, Size size) onPanStart;
@@ -37,44 +38,24 @@ class VisualRangeCardCanvas extends StatelessWidget {
 
         return GestureDetector(
           behavior: HitTestBehavior.opaque,
-          onTapDown: (details) => onTapDown(details.localPosition, size),
-          onPanStart: (details) => onPanStart(details.localPosition, size),
-          onPanUpdate: (details) => onPanUpdate(details.localPosition, size),
-          onPanEnd: (_) => onPanEnd(),
-          child: Stack(
-            children: [
-              CustomPaint(
-                size: size,
-                painter: _VisualRangeCardPainter(
-                  card: card,
-                  draftTerrainPoints: draftTerrainPoints,
-                  editorMode: editorMode,
-                  visualRangeCardService: visualRangeCardService,
-                ),
-              ),
-              Positioned(
-                left: AppSpacing.md,
-                top: AppSpacing.md,
-                child: DecoratedBox(
-                  decoration: BoxDecoration(
-                    color: Colors.black.withValues(alpha: 0.32),
-                    borderRadius: BorderRadius.circular(12),
-                  ),
-                  child: Padding(
-                    padding: const EdgeInsets.symmetric(
-                      horizontal: AppSpacing.sm,
-                      vertical: AppSpacing.xs,
-                    ),
-                    child: Text(
-                      editorMode == VisualEditorMode.marker
-                          ? 'Tap to place targets • Drag markers to adjust'
-                          : 'Tap to draw ${editorMode.label.toLowerCase()}',
-                      style: Theme.of(context).textTheme.bodySmall,
-                    ),
-                  ),
-                ),
-              ),
-            ],
+          onTapUp: interactionEnabled
+              ? (details) => onTapDown(details.localPosition, size)
+              : null,
+          onPanStart: interactionEnabled
+              ? (details) => onPanStart(details.localPosition, size)
+              : null,
+          onPanUpdate: interactionEnabled
+              ? (details) => onPanUpdate(details.localPosition, size)
+              : null,
+          onPanEnd: interactionEnabled ? (_) => onPanEnd() : null,
+          child: CustomPaint(
+            size: size,
+            painter: _VisualRangeCardPainter(
+              card: card,
+              draftTerrainPoints: draftTerrainPoints,
+              editorMode: editorMode,
+              visualRangeCardService: visualRangeCardService,
+            ),
           ),
         );
       },

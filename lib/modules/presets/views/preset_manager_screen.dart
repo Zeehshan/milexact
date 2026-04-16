@@ -16,7 +16,9 @@ import 'package:milexact/shared/widgets/selector_chips.dart';
 import 'package:milexact/shared/widgets/tactical_scaffold.dart';
 
 class QuickPresetScreen extends GetView<QuickPresetController> {
-  const QuickPresetScreen({super.key});
+  const QuickPresetScreen({super.key, this.showBottomNav = true});
+
+  final bool showBottomNav;
 
   @override
   Widget build(BuildContext context) {
@@ -25,6 +27,7 @@ class QuickPresetScreen extends GetView<QuickPresetController> {
     return TacticalScaffold(
       title: 'Quick Presets',
       currentRoute: AppRoutes.quickPresets,
+      showBottomNav: showBottomNav,
       body: Obx(() {
         final categories = controller.categories.toList(growable: false);
         final selectedCategory = controller.selectedCategory;
@@ -35,15 +38,15 @@ class QuickPresetScreen extends GetView<QuickPresetController> {
           child: Column(
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
-              if (controller.selectionMode.value) ...[
-                SectionCard(
-                  child: Text(
-                    'Tap a preset to send it back to the calculator.',
-                    style: theme.textTheme.bodyMedium,
-                  ),
-                ),
-                const SizedBox(height: AppSpacing.md),
-              ],
+              // if (controller.selectionMode.value) ...[
+              //   SectionCard(
+              //     child: Text(
+              //       'Tap a preset to send it back to the calculator.',
+              //       style: theme.textTheme.bodyMedium,
+              //     ),
+              //   ),
+              //   const SizedBox(height: AppSpacing.md),
+              // ],
               LabeledTextField(
                 label: 'Search Presets',
                 hint: 'Search by name',
@@ -51,6 +54,9 @@ class QuickPresetScreen extends GetView<QuickPresetController> {
               ),
               const SizedBox(height: AppSpacing.md),
               SectionCard(
+                padding: EdgeInsetsGeometry.symmetric(
+                  horizontal: AppSpacing.md,
+                ),
                 child: Column(
                   crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
@@ -69,7 +75,6 @@ class QuickPresetScreen extends GetView<QuickPresetController> {
                         ),
                       ],
                     ),
-                    const SizedBox(height: AppSpacing.sm),
                     if (categories.isEmpty)
                       const EmptyStateView(
                         title: 'No categories',
@@ -116,6 +121,7 @@ class QuickPresetScreen extends GetView<QuickPresetController> {
                           ),
                         ],
                       ),
+                      SizedBox(height: AppSpacing.md),
                     ],
                   ],
                 ),

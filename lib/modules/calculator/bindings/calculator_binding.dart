@@ -8,6 +8,9 @@ import 'package:milexact/services/reticle_measurement_service.dart';
 class CalculatorBinding extends Bindings {
   @override
   void dependencies() {
+    if (Get.isRegistered<CalculatorController>()) {
+      return;
+    }
     Get.lazyPut<CalculatorController>(
       () => CalculatorController(
         Get.find<PresetsRepository>(),

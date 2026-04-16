@@ -52,7 +52,7 @@ class SignUpController extends GetxController {
 
     try {
       await _authService.signUp(email: email, password: password);
-      Get.offAllNamed(AppRoutes.calculator);
+      Get.offAllNamed(AppRoutes.home);
     } on AuthException catch (error) {
       errorMessage.value = error.message;
     } finally {

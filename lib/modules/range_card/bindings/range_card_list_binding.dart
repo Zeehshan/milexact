@@ -5,6 +5,9 @@ import 'package:milexact/modules/range_card/controllers/range_card_list_controll
 class RangeCardListBinding extends Bindings {
   @override
   void dependencies() {
+    if (Get.isRegistered<RangeCardListController>()) {
+      return;
+    }
     Get.lazyPut<RangeCardListController>(
       () => RangeCardListController(Get.find<RangeCardRepository>()),
     );

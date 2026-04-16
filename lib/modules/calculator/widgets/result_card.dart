@@ -9,10 +9,12 @@ class ResultCard extends StatelessWidget {
     super.key,
     required this.result,
     required this.errorMessage,
+    required this.showResult,
   });
 
   final DistanceResult? result;
   final String errorMessage;
+  final bool showResult;
 
   @override
   Widget build(BuildContext context) {
@@ -23,14 +25,15 @@ class ResultCard extends StatelessWidget {
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          Text('Distance Solution', style: theme.textTheme.titleLarge),
+          if (!showResult)
+            Text('Distance Solution', style: theme.textTheme.titleLarge),
           const SizedBox(height: AppSpacing.md),
-          if (result == null)
+          if (!showResult)
             Text(
               'Use the reticle and target dimensions to solve range instantly.',
               style: theme.textTheme.bodyLarge,
-            )
-          else ...[
+            ),
+          if (showResult == true && result != null) ...[
             Wrap(
               spacing: AppSpacing.sm,
               runSpacing: AppSpacing.sm,
@@ -56,7 +59,7 @@ class ResultCard extends StatelessWidget {
             const SizedBox(height: AppSpacing.md),
             Text(result!.formulaPreview, style: theme.textTheme.bodySmall),
           ],
-          if (errorMessage.isNotEmpty) ...[
+          if (errorMessage.isNotEmpty && (!showResult)) ...[
             const SizedBox(height: AppSpacing.md),
             Text(
               errorMessage,

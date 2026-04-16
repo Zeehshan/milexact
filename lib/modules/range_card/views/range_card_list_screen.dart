@@ -10,13 +10,16 @@ import 'package:milexact/shared/widgets/labeled_text_field.dart';
 import 'package:milexact/shared/widgets/tactical_scaffold.dart';
 
 class RangeCardListScreen extends GetView<RangeCardListController> {
-  const RangeCardListScreen({super.key});
+  const RangeCardListScreen({super.key, this.showBottomNav = true});
+
+  final bool showBottomNav;
 
   @override
   Widget build(BuildContext context) {
     return TacticalScaffold(
       title: 'Range Card',
       currentRoute: AppRoutes.rangeCardList,
+      showBottomNav: showBottomNav,
       body: Padding(
         padding: AppSpacing.screenPadding,
         child: Column(

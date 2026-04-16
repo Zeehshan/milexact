@@ -1,24 +1,122 @@
+import 'dart:math' as math;
+
 import 'package:flutter/material.dart';
 import 'package:milexact/app/theme/app_colors.dart';
 import 'package:milexact/data/models/enums.dart';
 
-class ReticleMeasurementPanel extends StatelessWidget {
+const double _reticleInnerRadiusFactor = 0.40;
+const double _reticleOuterRadiusMultiplier = 1.15;
+
+class ReticleMeasurementPanel extends StatefulWidget {
   const ReticleMeasurementPanel({
     super.key,
     required this.referenceDimension,
-    required this.handleFraction,
+    required this.baselineFraction,
+    required this.measurementFraction,
     required this.reticleType,
     required this.reticleProfile,
     required this.readingLabel,
-    required this.onInteraction,
+    required this.interactionEnabled,
+    required this.onInteractionActiveChanged,
+    required this.onInteractionStart,
+    required this.onInteractionUpdate,
+    this.motionDuration = const Duration(milliseconds: 72),
+    this.motionCurve = Curves.easeOutCubic,
   });
 
   final TargetDimensionType referenceDimension;
-  final double handleFraction;
+  final double baselineFraction;
+  final double measurementFraction;
   final ReticleType reticleType;
   final ReticleProfile reticleProfile;
   final String readingLabel;
-  final void Function(Offset localPosition, Size size) onInteraction;
+  final bool interactionEnabled;
+  final ValueChanged<bool> onInteractionActiveChanged;
+  final void Function(Offset localPosition, Size size) onInteractionStart;
+  final void Function(Offset localPosition, Size size) onInteractionUpdate;
+  final Duration motionDuration;
+  final Curve motionCurve;
+
+  @override
+  State<ReticleMeasurementPanel> createState() =>
+      _ReticleMeasurementPanelState();
+}
+
+class _ReticleMeasurementPanelState extends State<ReticleMeasurementPanel>
+    with SingleTickerProviderStateMixin {
+  late final AnimationController _motionController;
+  late Animation<double> _motionAnimation;
+  late double _displayBaselineFraction;
+  late double _displayMeasurementFraction;
+  Tween<double>? _baselineTween;
+  Tween<double>? _measurementTween;
+  int? _activePointer;
+
+  @override
+  void initState() {
+    super.initState();
+    _displayBaselineFraction = widget.baselineFraction;
+    _displayMeasurementFraction = widget.measurementFraction;
+    _motionController = AnimationController(
+      vsync: this,
+      duration: widget.motionDuration,
+    );
+    _motionAnimation = CurvedAnimation(
+      parent: _motionController,
+      curve: widget.motionCurve,
+    );
+    _motionController.addListener(_handleAnimationTick);
+  }
+
+  @override
+  void didUpdateWidget(covariant ReticleMeasurementPanel oldWidget) {
+    super.didUpdateWidget(oldWidget);
+
+    if (oldWidget.motionDuration != widget.motionDuration) {
+      _motionController.duration = widget.motionDuration;
+    }
+
+    if (oldWidget.interactionEnabled && !widget.interactionEnabled) {
+      _activePointer = null;
+      widget.onInteractionActiveChanged(false);
+    }
+
+    if (oldWidget.baselineFraction != widget.baselineFraction ||
+        oldWidget.measurementFraction != widget.measurementFraction) {
+      _baselineTween = Tween<double>(
+        begin: _displayBaselineFraction,
+        end: widget.baselineFraction,
+      );
+      _measurementTween = Tween<double>(
+        begin: _displayMeasurementFraction,
+        end: widget.measurementFraction,
+      );
+      _motionAnimation = CurvedAnimation(
+        parent: _motionController,
+        curve: widget.motionCurve,
+      );
+      _motionController.forward(from: 0);
+    }
+  }
+
+  @override
+  void dispose() {
+    widget.onInteractionActiveChanged(false);
+    _motionController
+      ..removeListener(_handleAnimationTick)
+      ..dispose();
+    super.dispose();
+  }
+
+  void _handleAnimationTick() {
+    setState(() {
+      _displayBaselineFraction =
+          _baselineTween?.evaluate(_motionAnimation) ?? widget.baselineFraction;
+      _displayMeasurementFraction =
+          _measurementTween?.evaluate(_motionAnimation) ??
+          widget.measurementFraction;
+    });
+  }
 
   @override
   Widget build(BuildContext context) {
@@ -26,11 +124,18 @@ class ReticleMeasurementPanel extends StatelessWidget {
       builder: (context, constraints) {
         final size = Size(constraints.maxWidth, 280);
 
-        return GestureDetector(
+        return Listener(
           behavior: HitTestBehavior.opaque,
-          onTapDown: (details) => onInteraction(details.localPosition, size),
-          onPanDown: (details) => onInteraction(details.localPosition, size),
-          onPanUpdate: (details) => onInteraction(details.localPosition, size),
+          onPointerDown: widget.interactionEnabled
+              ? (event) => _handlePointerDown(event, size)
+              : null,
+          onPointerMove: widget.interactionEnabled
+              ? (event) => _handlePointerMove(event, size)
+              : null,
+          onPointerUp: widget.interactionEnabled ? _handlePointerUp : null,
+          onPointerCancel: widget.interactionEnabled
+              ? _handlePointerCancel
+              : null,
           child: SizedBox(
             height: size.height,
             width: double.infinity,
@@ -38,12 +143,13 @@ class ReticleMeasurementPanel extends StatelessWidget {
               children: [
                 CustomPaint(
                   size: size,
-                  painter: _ReticlePainter(
-                    referenceDimension: referenceDimension,
-                    handleFraction: handleFraction,
-                    reticleType: reticleType,
-                    reticleProfile: reticleProfile,
-                    readingLabel: readingLabel,
+                  painter: ReticleMeasurementPainter(
+                    referenceDimension: widget.referenceDimension,
+                    baselineFraction: _displayBaselineFraction,
+                    measurementFraction: _displayMeasurementFraction,
+                    reticleType: widget.reticleType,
+                    reticleProfile: widget.reticleProfile,
+                    readingLabel: widget.readingLabel,
                   ),
                 ),
               ],
@@ -53,19 +159,82 @@ class ReticleMeasurementPanel extends StatelessWidget {
       },
     );
   }
+
+  void _handlePointerDown(PointerDownEvent event, Size size) {
+    _activePointer = event.pointer;
+    widget.onInteractionActiveChanged(true);
+    widget.onInteractionStart(
+      _clampInteractionToScope(event.localPosition, size),
+      size,
+    );
+  }
+
+  void _handlePointerMove(PointerMoveEvent event, Size size) {
+    if (_activePointer != event.pointer) {
+      return;
+    }
+
+    widget.onInteractionUpdate(
+      _clampInteractionToScope(event.localPosition, size),
+      size,
+    );
+  }
+
+  void _handlePointerUp(PointerUpEvent event) {
+    if (_activePointer != event.pointer) {
+      return;
+    }
+
+    _activePointer = null;
+    widget.onInteractionActiveChanged(false);
+  }
+
+  void _handlePointerCancel(PointerCancelEvent event) {
+    if (_activePointer != event.pointer) {
+      return;
+    }
+
+    _activePointer = null;
+    widget.onInteractionActiveChanged(false);
+  }
+
+  Offset _clampInteractionToScope(Offset localPosition, Size size) {
+    final center = Offset(size.width / 2, size.height / 2);
+    final scopeRadius =
+        size.shortestSide *
+        _reticleInnerRadiusFactor *
+        _reticleOuterRadiusMultiplier;
+
+    if (widget.referenceDimension == TargetDimensionType.height) {
+      return Offset(
+        localPosition.dx,
+        localPosition.dy.clamp(
+          center.dy - scopeRadius,
+          center.dy + scopeRadius,
+        ),
+      );
+    }
+
+    return Offset(
+      localPosition.dx.clamp(center.dx - scopeRadius, center.dx + scopeRadius),
+      localPosition.dy,
+    );
+  }
 }
 
-class _ReticlePainter extends CustomPainter {
-  const _ReticlePainter({
+class ReticleMeasurementPainter extends CustomPainter {
+  const ReticleMeasurementPainter({
     required this.referenceDimension,
-    required this.handleFraction,
+    required this.baselineFraction,
+    required this.measurementFraction,
     required this.reticleType,
     required this.reticleProfile,
     required this.readingLabel,
   });
 
   final TargetDimensionType referenceDimension;
-  final double handleFraction;
+  final double baselineFraction;
+  final double measurementFraction;
   final ReticleType reticleType;
   final ReticleProfile reticleProfile;
   final String readingLabel;
@@ -73,8 +242,8 @@ class _ReticlePainter extends CustomPainter {
   @override
   void paint(Canvas canvas, Size size) {
     final center = Offset(size.width / 2, size.height / 2);
-    const edgePadding = 18.0;
-    final radius = size.shortestSide * 0.38;
+    final radius = size.shortestSide * _reticleInnerRadiusFactor;
+    final scopeRadius = radius * _reticleOuterRadiusMultiplier;
     final borderPaint = Paint()
       ..color = AppColors.border
       ..style = PaintingStyle.stroke
@@ -94,9 +263,6 @@ class _ReticlePainter extends CustomPainter {
     final tickPaint = Paint()
       ..color = AppColors.primary.withValues(alpha: 0.52)
       ..strokeWidth = 1;
-    final accentFillPaint = Paint()
-      ..color = AppColors.accent
-      ..style = PaintingStyle.fill;
 
     final rect = RRect.fromRectAndRadius(
       Offset.zero & size,
@@ -104,17 +270,17 @@ class _ReticlePainter extends CustomPainter {
     );
     canvas.drawRRect(rect, borderPaint);
 
-    canvas.drawCircle(center, radius * 1.14, ringPaint);
+    canvas.drawCircle(center, scopeRadius, ringPaint);
     canvas.drawCircle(center, radius, ringPaint);
 
     canvas.drawLine(
-      Offset(center.dx, edgePadding),
-      Offset(center.dx, size.height - edgePadding),
+      Offset(center.dx, center.dy - scopeRadius),
+      Offset(center.dx, center.dy + scopeRadius),
       reticlePaint,
     );
     canvas.drawLine(
-      Offset(edgePadding, center.dy),
-      Offset(size.width - edgePadding, center.dy),
+      Offset(center.dx - scopeRadius, center.dy),
+      Offset(center.dx + scopeRadius, center.dy),
       reticlePaint,
     );
 
@@ -134,52 +300,295 @@ class _ReticlePainter extends CustomPainter {
     _drawAxisLabels(canvas, size, center, radius);
 
     if (referenceDimension == TargetDimensionType.height) {
-      final offset = size.height * handleFraction;
-      final topY = center.dy - offset;
-      final bottomY = center.dy + offset;
-      canvas.drawLine(
-        Offset(center.dx - 58, topY),
-        Offset(center.dx + 58, topY),
-        accentPaint,
+      final baselineY = size.height * baselineFraction;
+      final measurementY = size.height * measurementFraction;
+      _drawHeightMeasurementOverlay(
+        canvas: canvas,
+        size: size,
+        center: center,
+        scopeRadius: scopeRadius,
+        baselineY: baselineY,
+        measurementY: measurementY,
+        accentPaint: accentPaint,
       );
-      canvas.drawLine(
-        Offset(center.dx - 58, bottomY),
-        Offset(center.dx + 58, bottomY),
-        accentPaint,
-      );
-      canvas.drawLine(
-        Offset(center.dx + 64, topY),
-        Offset(center.dx + 64, bottomY),
-        accentPaint,
-      );
-      canvas.drawCircle(Offset(center.dx + 64, topY), 4.5, accentFillPaint);
-      canvas.drawCircle(Offset(center.dx + 64, bottomY), 4.5, accentFillPaint);
     } else {
-      final offset = size.width * handleFraction;
-      final leftX = center.dx - offset;
-      final rightX = center.dx + offset;
-      canvas.drawLine(
-        Offset(leftX, center.dy - 58),
-        Offset(leftX, center.dy + 58),
-        accentPaint,
+      final baselineX = size.width * baselineFraction;
+      final measurementX = size.width * measurementFraction;
+      _drawWidthMeasurementOverlay(
+        canvas: canvas,
+        size: size,
+        center: center,
+        scopeRadius: scopeRadius,
+        baselineX: baselineX,
+        measurementX: measurementX,
+        accentPaint: accentPaint,
       );
-      canvas.drawLine(
-        Offset(rightX, center.dy - 58),
-        Offset(rightX, center.dy + 58),
-        accentPaint,
-      );
-      canvas.drawLine(
-        Offset(leftX, center.dy + 64),
-        Offset(rightX, center.dy + 64),
-        accentPaint,
-      );
-      canvas.drawCircle(Offset(leftX, center.dy + 64), 4.5, accentFillPaint);
-      canvas.drawCircle(Offset(rightX, center.dy + 64), 4.5, accentFillPaint);
     }
 
-    _drawReadout(canvas, size, center);
-    _drawLegend(canvas, size);
+    _drawLegend(canvas, size, center, scopeRadius);
     _drawFooter(canvas, size);
+  }
+
+  void _drawHeightMeasurementOverlay({
+    required Canvas canvas,
+    required Size size,
+    required Offset center,
+    required double scopeRadius,
+    required double baselineY,
+    required double measurementY,
+    required Paint accentPaint,
+  }) {
+    final deltaFraction = (measurementFraction - baselineFraction).abs();
+    final dashedPaint = Paint()
+      ..color = AppColors.primary.withValues(alpha: 0.95)
+      ..style = PaintingStyle.stroke
+      ..strokeWidth = 2;
+    final zeroFillPaint = Paint()
+      ..color = AppColors.primary.withValues(alpha: 0.14)
+      ..style = PaintingStyle.fill;
+    final zeroBorderPaint = Paint()
+      ..color = AppColors.primary.withValues(alpha: 0.95)
+      ..style = PaintingStyle.stroke
+      ..strokeWidth = 1;
+    final hasMeasurement = deltaFraction > 0.001 && readingLabel.isNotEmpty;
+
+    final baselineHalfSpan = _horizontalHalfSpanForCircle(
+      center: center,
+      radius: scopeRadius,
+      y: baselineY,
+    );
+    final measurementHalfSpan = _horizontalHalfSpanForCircle(
+      center: center,
+      radius: scopeRadius,
+      y: measurementY,
+    );
+
+    _drawDashedLine(
+      canvas: canvas,
+      start: Offset(center.dx - baselineHalfSpan, baselineY),
+      end: Offset(center.dx + baselineHalfSpan, baselineY),
+      paint: dashedPaint,
+      dashLength: 10,
+      gapLength: 6,
+    );
+
+    final zeroRect = RRect.fromRectAndRadius(
+      Rect.fromCenter(
+        center: Offset(center.dx - baselineHalfSpan + 9, baselineY - 2),
+        width: 8,
+        height: 16,
+      ),
+      const Radius.circular(2),
+    );
+    canvas.drawRRect(zeroRect, zeroFillPaint);
+    canvas.drawRRect(zeroRect, zeroBorderPaint);
+    _paintText(
+      canvas,
+      text: '0',
+      offset: Offset(zeroRect.left + 2.1, zeroRect.top + 2.2),
+      style: const TextStyle(
+        color: AppColors.primary,
+        fontSize: 9,
+        fontWeight: FontWeight.w800,
+      ),
+    );
+
+    if (hasMeasurement) {
+      canvas.drawLine(
+        Offset(center.dx - measurementHalfSpan, measurementY),
+        Offset(center.dx + measurementHalfSpan, measurementY),
+        accentPaint,
+      );
+
+      canvas.drawLine(
+        Offset(center.dx - 32, center.dy - 14),
+        Offset(center.dx + 10, center.dy - 14),
+        accentPaint,
+      );
+      canvas.drawLine(
+        Offset(center.dx - 32, center.dy + 14),
+        Offset(center.dx + 10, center.dy + 14),
+        accentPaint,
+      );
+
+      _paintText(
+        canvas,
+        text: '$readingLabel ${reticleType.label}',
+        offset: Offset(center.dx + 38, center.dy - 8),
+        style: const TextStyle(
+          color: AppColors.accent,
+          fontSize: 10,
+          fontWeight: FontWeight.w700,
+        ),
+      );
+
+      final badgeText = '$readingLabel ${reticleType.label}';
+      final badgePainter = _textPainter(
+        badgeText,
+        const TextStyle(
+          color: AppColors.accent,
+          fontSize: 18,
+          fontWeight: FontWeight.w700,
+        ),
+      );
+      final padding = const EdgeInsets.symmetric(horizontal: 12, vertical: 8);
+      final badgeRect = RRect.fromRectAndRadius(
+        Rect.fromLTWH(
+          center.dx + 26,
+          measurementY - 24,
+          badgePainter.width + padding.horizontal,
+          badgePainter.height + padding.vertical,
+        ),
+        const Radius.circular(12),
+      );
+      final badgeFillPaint = Paint()
+        ..color = AppColors.background.withValues(alpha: 0.88)
+        ..style = PaintingStyle.fill;
+      final badgeBorderPaint = Paint()
+        ..color = AppColors.accent.withValues(alpha: 0.24)
+        ..style = PaintingStyle.stroke
+        ..strokeWidth = 1;
+      canvas.drawRRect(badgeRect, badgeFillPaint);
+      canvas.drawRRect(badgeRect, badgeBorderPaint);
+      badgePainter.paint(
+        canvas,
+        Offset(badgeRect.left + padding.left, badgeRect.top + padding.top),
+      );
+    }
+  }
+
+  void _drawWidthMeasurementOverlay({
+    required Canvas canvas,
+    required Size size,
+    required Offset center,
+    required double scopeRadius,
+    required double baselineX,
+    required double measurementX,
+    required Paint accentPaint,
+  }) {
+    final deltaFraction = (measurementFraction - baselineFraction).abs();
+    final dashedPaint = Paint()
+      ..color = AppColors.primary.withValues(alpha: 0.95)
+      ..style = PaintingStyle.stroke
+      ..strokeWidth = 2;
+    final zeroFillPaint = Paint()
+      ..color = AppColors.primary.withValues(alpha: 0.14)
+      ..style = PaintingStyle.fill;
+    final zeroBorderPaint = Paint()
+      ..color = AppColors.primary.withValues(alpha: 0.95)
+      ..style = PaintingStyle.stroke
+      ..strokeWidth = 1;
+    final hasMeasurement = deltaFraction > 0.001 && readingLabel.isNotEmpty;
+
+    final baselineHalfSpan = _verticalHalfSpanForCircle(
+      center: center,
+      radius: scopeRadius,
+      x: baselineX,
+    );
+    final measurementHalfSpan = _verticalHalfSpanForCircle(
+      center: center,
+      radius: scopeRadius,
+      x: measurementX,
+    );
+
+    _drawDashedLine(
+      canvas: canvas,
+      start: Offset(baselineX, center.dy - baselineHalfSpan),
+      end: Offset(baselineX, center.dy + baselineHalfSpan),
+      paint: dashedPaint,
+      dashLength: 10,
+      gapLength: 6,
+    );
+
+    final zeroRect = RRect.fromRectAndRadius(
+      Rect.fromCenter(
+        center: Offset(baselineX, center.dy - baselineHalfSpan + 8),
+        width: 16,
+        height: 8,
+      ),
+      const Radius.circular(2),
+    );
+    canvas.drawRRect(zeroRect, zeroFillPaint);
+    canvas.drawRRect(zeroRect, zeroBorderPaint);
+    _paintText(
+      canvas,
+      text: '0',
+      offset: Offset(zeroRect.left + 5.2, zeroRect.top - 0.3),
+      style: const TextStyle(
+        color: AppColors.primary,
+        fontSize: 9,
+        fontWeight: FontWeight.w800,
+      ),
+    );
+
+    if (hasMeasurement) {
+      canvas.drawLine(
+        Offset(measurementX, center.dy - measurementHalfSpan),
+        Offset(measurementX, center.dy + measurementHalfSpan),
+        accentPaint,
+      );
+
+      canvas.drawLine(
+        Offset(center.dx - 14, center.dy - 32),
+        Offset(center.dx - 14, center.dy + 10),
+        accentPaint,
+      );
+      canvas.drawLine(
+        Offset(center.dx + 14, center.dy - 32),
+        Offset(center.dx + 14, center.dy + 10),
+        accentPaint,
+      );
+
+      _paintText(
+        canvas,
+        text: '$readingLabel ${reticleType.label}',
+        offset: Offset(center.dx - 8, center.dy - 4),
+        style: const TextStyle(
+          color: AppColors.accent,
+          fontSize: 10,
+          fontWeight: FontWeight.w700,
+        ),
+      );
+
+      final badgeText = '$readingLabel ${reticleType.label}';
+      final badgePainter = _textPainter(
+        badgeText,
+        const TextStyle(
+          color: AppColors.accent,
+          fontSize: 18,
+          fontWeight: FontWeight.w700,
+        ),
+      );
+      final padding = const EdgeInsets.symmetric(horizontal: 12, vertical: 8);
+      final midpointX = (baselineX + measurementX) / 2;
+      final badgeLeft =
+          (midpointX - ((badgePainter.width + padding.horizontal) / 2)).clamp(
+            18.0,
+            size.width - badgePainter.width - padding.horizontal - 18,
+          );
+      final badgeRect = RRect.fromRectAndRadius(
+        Rect.fromLTWH(
+          badgeLeft,
+          center.dy - 18,
+          badgePainter.width + padding.horizontal,
+          badgePainter.height + padding.vertical,
+        ),
+        const Radius.circular(12),
+      );
+      final badgeFillPaint = Paint()
+        ..color = AppColors.background.withValues(alpha: 0.88)
+        ..style = PaintingStyle.fill;
+      final badgeBorderPaint = Paint()
+        ..color = AppColors.accent.withValues(alpha: 0.24)
+        ..style = PaintingStyle.stroke
+        ..strokeWidth = 1;
+      canvas.drawRRect(badgeRect, badgeFillPaint);
+      canvas.drawRRect(badgeRect, badgeBorderPaint);
+      badgePainter.paint(
+        canvas,
+        Offset(badgeRect.left + padding.left, badgeRect.top + padding.top),
+      );
+    }
   }
 
   void _drawStandardTicks(Canvas canvas, Offset center, Paint tickPaint) {
@@ -300,6 +709,10 @@ class _ReticlePainter extends CustomPainter {
     Offset center,
     Paint reticlePaint,
   ) {
+    final scopeRadius =
+        size.shortestSide *
+        _reticleInnerRadiusFactor *
+        _reticleOuterRadiusMultiplier;
     final thickPaint = Paint()
       ..color = reticlePaint.color
       ..style = PaintingStyle.stroke
@@ -307,67 +720,33 @@ class _ReticlePainter extends CustomPainter {
       ..strokeCap = StrokeCap.round;
 
     canvas.drawLine(
-      Offset(16, center.dy),
+      Offset(center.dx - scopeRadius, center.dy),
       Offset(center.dx - 44, center.dy),
       thickPaint,
     );
     canvas.drawLine(
       Offset(center.dx + 44, center.dy),
-      Offset(size.width - 16, center.dy),
+      Offset(center.dx + scopeRadius, center.dy),
       thickPaint,
     );
     canvas.drawLine(
-      Offset(center.dx, 16),
+      Offset(center.dx, center.dy - scopeRadius),
       Offset(center.dx, center.dy - 44),
       thickPaint,
     );
     canvas.drawLine(
       Offset(center.dx, center.dy + 44),
-      Offset(center.dx, size.height - 16),
+      Offset(center.dx, center.dy + scopeRadius),
       thickPaint,
     );
   }
 
-  void _drawReadout(Canvas canvas, Size size, Offset center) {
-    final displayText =
-        '${readingLabel.isEmpty ? '--' : readingLabel} ${reticleType.label}';
-    final textStyle = const TextStyle(
-      color: AppColors.accent,
-      fontSize: 18,
-      fontWeight: FontWeight.w700,
-    );
-    final textPainter = _textPainter(displayText, textStyle);
-    final padding = const EdgeInsets.symmetric(horizontal: 12, vertical: 8);
-    final badgeWidth = textPainter.width + padding.horizontal;
-    final badgeHeight = textPainter.height + padding.vertical;
-    final badgeCenter = referenceDimension == TargetDimensionType.height
-        ? Offset(center.dx - 78, center.dy)
-        : Offset(center.dx, center.dy - 44);
-    final badgeRect = RRect.fromRectAndRadius(
-      Rect.fromCenter(
-        center: badgeCenter,
-        width: badgeWidth,
-        height: badgeHeight,
-      ),
-      const Radius.circular(14),
-    );
-    final badgePaint = Paint()
-      ..color = AppColors.background.withValues(alpha: 0.82)
-      ..style = PaintingStyle.fill;
-    final badgeBorderPaint = Paint()
-      ..color = AppColors.accent.withValues(alpha: 0.34)
-      ..style = PaintingStyle.stroke
-      ..strokeWidth = 1;
-
-    canvas.drawRRect(badgeRect, badgePaint);
-    canvas.drawRRect(badgeRect, badgeBorderPaint);
-    textPainter.paint(
-      canvas,
-      Offset(badgeRect.left + padding.left, badgeRect.top + padding.top),
-    );
-  }
-
-  void _drawLegend(Canvas canvas, Size size) {
+  void _drawLegend(
+    Canvas canvas,
+    Size size,
+    Offset center,
+    double scopeRadius,
+  ) {
     final activeStyle = const TextStyle(
       color: AppColors.accent,
       fontSize: 11,
@@ -378,36 +757,48 @@ class _ReticlePainter extends CustomPainter {
       fontSize: 11,
       fontWeight: FontWeight.w600,
     );
-    final topLine = referenceDimension == TargetDimensionType.height
-        ? '↕ Active height scale • ${reticleProfile.heightGuide} ${reticleType.label}'
-        : '↕ Height scale • ${reticleProfile.heightGuide} ${reticleType.label}';
-    final bottomLine = referenceDimension == TargetDimensionType.width
-        ? '↔ Active width scale • ${reticleProfile.widthGuide} ${reticleType.label}'
-        : '↔ Width scale • ${reticleProfile.widthGuide} ${reticleType.label}';
+    final topLine = '↕ • ${reticleProfile.heightGuide} ${reticleType.label}';
+    final bottomLine = '↔ • ${reticleProfile.widthGuide} ${reticleType.label}';
+    final topPainter = _textPainter(
+      topLine,
+      referenceDimension == TargetDimensionType.height
+          ? activeStyle
+          : inactiveStyle,
+    );
+    final bottomPainter = _textPainter(
+      bottomLine,
+      referenceDimension == TargetDimensionType.width
+          ? activeStyle
+          : inactiveStyle,
+    );
+    const rightPadding = 8.0;
+    const topInset = 10.0;
+    const lineGap = 4.0;
+    final circleTop = center.dy - scopeRadius;
+    final circleRight = center.dx + scopeRadius;
+    final topY = (circleTop + topInset).clamp(
+      18.0,
+      size.height - topPainter.height - bottomPainter.height - lineGap - 18,
+    );
+    final bottomY = topY + topPainter.height + lineGap;
+    final blockWidth = topPainter.width > bottomPainter.width
+        ? topPainter.width
+        : bottomPainter.width;
+    final blockLeft = (circleRight - rightPadding - blockWidth).clamp(
+      center.dx - scopeRadius + 18,
+      size.width - blockWidth - 18,
+    );
 
-    _paintText(
-      canvas,
-      text: topLine,
-      offset: Offset(size.width - 210, 18),
-      style: referenceDimension == TargetDimensionType.height
-          ? activeStyle
-          : inactiveStyle,
-    );
-    _paintText(
-      canvas,
-      text: bottomLine,
-      offset: Offset(size.width - 210, 34),
-      style: referenceDimension == TargetDimensionType.width
-          ? activeStyle
-          : inactiveStyle,
-    );
+    topPainter.paint(canvas, Offset(blockLeft, topY));
+    bottomPainter.paint(canvas, Offset(blockLeft, bottomY));
   }
 
   void _drawFooter(Canvas canvas, Size size) {
     _paintText(
       canvas,
-      text:
-          '${reticleProfile.label} • drag to set ${referenceDimension.label.toLowerCase()}',
+      text: referenceDimension == TargetDimensionType.height ? '' : '',
+      // ? '${reticleProfile.label} • tap to set dashed base, drag to place amber height line'
+      // : '${reticleProfile.label} • tap to set dashed base, drag to place amber width line',
       offset: Offset(18, size.height - 24),
       style: const TextStyle(
         color: AppColors.textMuted,
@@ -435,10 +826,62 @@ class _ReticlePainter extends CustomPainter {
     _textPainter(text, style).paint(canvas, offset);
   }
 
+  void _drawDashedLine({
+    required Canvas canvas,
+    required Offset start,
+    required Offset end,
+    required Paint paint,
+    required double dashLength,
+    required double gapLength,
+  }) {
+    final vector = end - start;
+    final distance = vector.distance;
+    if (distance == 0) {
+      return;
+    }
+
+    final direction = vector / distance;
+    var progress = 0.0;
+    while (progress < distance) {
+      final segmentEnd = (progress + dashLength).clamp(0.0, distance);
+      canvas.drawLine(
+        start + (direction * progress),
+        start + (direction * segmentEnd),
+        paint,
+      );
+      progress += dashLength + gapLength;
+    }
+  }
+
+  double _horizontalHalfSpanForCircle({
+    required Offset center,
+    required double radius,
+    required double y,
+  }) {
+    final dy = (y - center.dy).abs();
+    if (dy >= radius) {
+      return 0;
+    }
+    return math.sqrt((radius * radius) - (dy * dy));
+  }
+
+  double _verticalHalfSpanForCircle({
+    required Offset center,
+    required double radius,
+    required double x,
+  }) {
+    final dx = (x - center.dx).abs();
+    if (dx >= radius) {
+      return 0;
+    }
+    return math.sqrt((radius * radius) - (dx * dx));
+  }
+
   @override
-  bool shouldRepaint(covariant _ReticlePainter oldDelegate) {
+  bool shouldRepaint(covariant ReticleMeasurementPainter oldDelegate) {
     return oldDelegate.referenceDimension != referenceDimension ||
-        oldDelegate.handleFraction != handleFraction ||
+        oldDelegate.baselineFraction != baselineFraction ||
+        oldDelegate.measurementFraction != measurementFraction ||
         oldDelegate.reticleProfile != reticleProfile ||
         oldDelegate.reticleType != reticleType ||
         oldDelegate.readingLabel != readingLabel;

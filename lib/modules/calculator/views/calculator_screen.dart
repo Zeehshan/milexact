@@ -16,11 +16,12 @@ import 'package:milexact/shared/widgets/selector_chips.dart';
 import 'package:milexact/shared/widgets/tactical_scaffold.dart';
 
 class CalculatorScreen extends GetView<CalculatorController> {
-  CalculatorScreen({super.key});
+  CalculatorScreen({super.key, this.showBottomNav = true});
 
   final _decimalFormatter = FilteringTextInputFormatter.allow(
     RegExp(r'^\d*\.?\d*$'),
   );
+  final bool showBottomNav;
 
   @override
   Widget build(BuildContext context) {
@@ -29,6 +30,7 @@ class CalculatorScreen extends GetView<CalculatorController> {
     return TacticalScaffold(
       title: 'MilExact',
       currentRoute: AppRoutes.calculator,
+      showBottomNav: showBottomNav,
       body: Obx(() {
         final categories = controller.categories.toList(growable: false);
         final presets = controller.availablePresets;
@@ -36,38 +38,44 @@ class CalculatorScreen extends GetView<CalculatorController> {
         final selectedPreset = controller.selectedPreset;
 
         return SingleChildScrollView(
+          physics:
+              controller.isMeasurementModeEnabled.value ||
+                  controller.isReticleInteracting.value
+              ? const NeverScrollableScrollPhysics()
+              : null,
           padding: AppSpacing.screenPadding,
           child: Column(
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
               ResultCard(
+                showResult: false,
                 result: controller.result.value,
                 errorMessage: controller.errorMessage.value,
               ),
-              const SizedBox(height: AppSpacing.md),
-              SectionCard(
-                child: Wrap(
-                  spacing: AppSpacing.sm,
-                  runSpacing: AppSpacing.sm,
-                  children: [
-                    FilledButton.tonalIcon(
-                      onPressed: controller.openRangeCard,
-                      icon: const Icon(Icons.view_agenda_rounded),
-                      label: const Text('Range Card'),
-                    ),
-                    FilledButton.tonalIcon(
-                      onPressed: controller.openDopeProfiles,
-                      icon: const Icon(Icons.straighten_rounded),
-                      label: const Text('DOPE'),
-                    ),
-                    FilledButton.tonalIcon(
-                      onPressed: controller.openVisualRangeCard,
-                      icon: const Icon(Icons.explore_rounded),
-                      label: const Text('Visual Card'),
-                    ),
-                  ],
-                ),
-              ),
+              // const SizedBox(height: AppSpacing.md),
+              // SectionCard(
+              //   child: Wrap(
+              //     spacing: AppSpacing.sm,
+              //     runSpacing: AppSpacing.sm,
+              //     children: [
+              //       FilledButton.tonalIcon(
+              //         onPressed: controller.openRangeCard,
+              //         icon: const Icon(Icons.view_agenda_rounded),
+              //         label: const Text('Range Card'),
+              //       ),
+              //       FilledButton.tonalIcon(
+              //         onPressed: controller.openDopeProfiles,
+              //         icon: const Icon(Icons.straighten_rounded),
+              //         label: const Text('DOPE'),
+              //       ),
+              //       FilledButton.tonalIcon(
+              //         onPressed: controller.openVisualRangeCard,
+              //         icon: const Icon(Icons.explore_rounded),
+              //         label: const Text('Visual Card'),
+              //       ),
+              //     ],
+              //   ),
+              // ),
               const SizedBox(height: AppSpacing.md),
               SectionCard(
                 child: Column(
@@ -222,18 +230,6 @@ class CalculatorScreen extends GetView<CalculatorController> {
                         onSelected: controller.setTargetUnit,
                       ),
                     ],
-                    const SizedBox(height: AppSpacing.md),
-                    Text(
-                      'Reference Dimension',
-                      style: theme.textTheme.titleMedium,
-                    ),
-                    const SizedBox(height: AppSpacing.xs),
-                    SelectorChips<TargetDimensionType>(
-                      options: TargetDimensionType.values,
-                      selectedValue: controller.referenceDimension.value,
-                      labelBuilder: (dimension) => dimension.label,
-                      onSelected: controller.setReferenceDimension,
-                    ),
                   ],
                 ),
               ),
@@ -265,22 +261,81 @@ class CalculatorScreen extends GetView<CalculatorController> {
                       onSelected: controller.setReticleProfile,
                     ),
                     const SizedBox(height: AppSpacing.md),
+                    Row(
+                      children: [
+                        Expanded(
+                          child: Column(
+                            crossAxisAlignment: CrossAxisAlignment.start,
+                            children: [
+                              Text(
+                                'Measurement Mode',
+                                style: theme.textTheme.titleMedium,
+                              ),
+                              const SizedBox(height: 2),
+                              SizedBox(
+                                height: 35,
+                                child: Text(
+                                  controller.isMeasurementModeEnabled.value
+                                      ? 'Reticle dragging is active and page scrolling is locked.'
+                                      : 'Enable this to drag guides inside the reticle.',
+                                  style: theme.textTheme.bodySmall,
+                                  maxLines: 2,
+                                ),
+                              ),
+                            ],
+                          ),
+                        ),
+                        Switch.adaptive(
+                          value: controller.isMeasurementModeEnabled.value,
+                          onChanged: controller.setMeasurementModeEnabled,
+                        ),
+                      ],
+                    ),
+                    const SizedBox(height: AppSpacing.sm),
                     ReticleMeasurementPanel(
                       referenceDimension: controller.referenceDimension.value,
-                      handleFraction: controller.reticleHandleFraction.value,
+                      baselineFraction: controller.activeBaselineFraction,
+                      measurementFraction: controller.activeMeasurementFraction,
                       reticleType: controller.selectedReticleType.value,
                       reticleProfile: controller.selectedReticleProfile.value,
                       readingLabel: controller.reticleReadingInput.value,
-                      onInteraction: (localPosition, size) {
+                      interactionEnabled:
+                          controller.isMeasurementModeEnabled.value,
+                      onInteractionActiveChanged:
+                          controller.setReticleInteractionActive,
+                      onInteractionStart: (localPosition, size) {
+                        controller.beginReticleInteraction(
+                          localPosition: localPosition,
+                          canvasSize: size,
+                        );
+                      },
+                      onInteractionUpdate: (localPosition, size) {
                         controller.updateReticleFromLocalPosition(
                           localPosition: localPosition,
                           canvasSize: size,
                         );
                       },
                     ),
+                    const SizedBox(height: AppSpacing.md),
+                    Text(
+                      'Reference Dimension',
+                      style: theme.textTheme.titleMedium,
+                    ),
+                    const SizedBox(height: AppSpacing.xs),
+                    SelectorChips<TargetDimensionType>(
+                      options: TargetDimensionType.values,
+                      selectedValue: controller.referenceDimension.value,
+                      labelBuilder: (dimension) => dimension.label,
+                      onSelected: controller.setReferenceDimension,
+                    ),
                     const SizedBox(height: AppSpacing.sm),
                     Text(
-                      'Using ${controller.selectedReticleProfile.value.label}. Drag the guide to match the target ${controller.referenceDimension.value.label.toLowerCase()} span in your reticle.',
+                      !controller.isMeasurementModeEnabled.value
+                          ? 'Enable Measurement Mode to place the dashed baseline and drag the amber measurement line.'
+                          : controller.referenceDimension.value ==
+                                TargetDimensionType.height
+                          ? 'Using ${controller.selectedReticleProfile.value.label}. Tap anywhere to place the dashed baseline, then drag to place the amber measurement line for target height.'
+                          : 'Using ${controller.selectedReticleProfile.value.label}. Tap anywhere to place the dashed baseline, then drag to place the amber measurement line for the target ${controller.referenceDimension.value.label.toLowerCase()}.',
                       style: theme.textTheme.bodySmall,
                     ),
                     const SizedBox(height: AppSpacing.md),
@@ -335,22 +390,35 @@ class CalculatorScreen extends GetView<CalculatorController> {
                 ),
               ),
               const SizedBox(height: AppSpacing.md),
-              FilledButton.icon(
-                onPressed: controller.calculate,
-                icon: const Icon(Icons.calculate_rounded),
-                label: Text(
-                  controller.liveCalculationEnabled.value
-                      ? 'Refresh Distance'
-                      : 'Calculate Distance',
+              if (controller.result.value != null)
+                SizedBox(
+                  width: double.infinity,
+                  child: ResultCard(
+                    showResult: true,
+                    result: controller.result.value,
+                    errorMessage: controller.errorMessage.value,
+                  ),
                 ),
-              ),
-              const SizedBox(height: AppSpacing.sm),
-              FilledButton.tonalIcon(
-                onPressed: controller.canSaveToRangeCard
-                    ? controller.addToRangeCard
-                    : null,
-                icon: const Icon(Icons.playlist_add_rounded),
-                label: const Text('Save to Range Card'),
+              // const SizedBox(height: AppSpacing.md),
+              // FilledButton.icon(
+              //   onPressed: controller.calculate,
+              //   icon: const Icon(Icons.calculate_rounded),
+              //   label: Text(
+              //     controller.liveCalculationEnabled.value
+              //         ? 'Refresh Distance'
+              //         : 'Calculate Distance',
+              //   ),
+              // ),
+              // const SizedBox(height: AppSpacing.sm),
+              Align(
+                alignment: Alignment.bottomRight,
+                child: FilledButton.tonalIcon(
+                  onPressed: controller.canSaveToRangeCard
+                      ? controller.addToRangeCard
+                      : null,
+                  icon: const Icon(Icons.playlist_add_rounded),
+                  label: const Text('Save to Range Card'),
+                ),
               ),
             ],
           ),

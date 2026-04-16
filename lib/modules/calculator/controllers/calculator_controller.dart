@@ -8,12 +8,15 @@ import 'package:milexact/data/models/target_category.dart';
 import 'package:milexact/data/models/target_preset.dart';
 import 'package:milexact/data/repositories/presets_repository.dart';
 import 'package:milexact/data/repositories/settings_repository.dart';
+import 'package:milexact/modules/app_shell/controllers/app_shell_controller.dart';
 import 'package:milexact/services/calculation_service.dart';
 import 'package:milexact/services/reticle_measurement_service.dart';
 import 'package:milexact/shared/utils/formatters.dart';
 import 'package:milexact/shared/utils/id_generator.dart';
 
 class CalculatorController extends GetxController {
+  static const double _minimumInteractionFraction = 0.006;
+
   CalculatorController(
     this._presetsRepository,
     this._settingsRepository,
@@ -41,13 +44,21 @@ class CalculatorController extends GetxController {
   final selectedReticleProfile = ReticleProfile.simpleCrosshair.obs;
   final displayPreference = DistanceDisplayPreference.both.obs;
   final liveCalculationEnabled = true.obs;
+  final isMeasurementModeEnabled = false.obs;
   final reticleHandleFraction = 0.12.obs;
+  final verticalBaselineFraction =
+      ReticleMeasurementService.zeroLineFraction.obs;
+  final verticalMeasurementFraction =
+      (ReticleMeasurementService.zeroLineFraction + 0.12).obs;
+  final horizontalBaselineFraction = 0.5.obs;
+  final horizontalMeasurementFraction = 0.62.obs;
   final manualTargetName = ''.obs;
   final manualTargetHeightInput = ''.obs;
   final manualTargetWidthInput = ''.obs;
   final reticleReadingInput = ''.obs;
   final result = Rxn<DistanceResult>();
   final errorMessage = ''.obs;
+  final isReticleInteracting = false.obs;
 
   RxList<TargetCategory> get categories => _presetsRepository.categories;
 
@@ -122,6 +133,16 @@ class CalculatorController extends GetxController {
 
   bool get canSaveToRangeCard => result.value != null;
 
+  double get activeBaselineFraction =>
+      referenceDimension.value == TargetDimensionType.height
+      ? verticalBaselineFraction.value
+      : horizontalBaselineFraction.value;
+
+  double get activeMeasurementFraction =>
+      referenceDimension.value == TargetDimensionType.height
+      ? verticalMeasurementFraction.value
+      : horizontalMeasurementFraction.value;
+
   @override
   void onInit() {
     super.onInit();
@@ -183,6 +204,13 @@ class CalculatorController extends GetxController {
     _handleCalculationInputChange();
   }
 
+  void setMeasurementModeEnabled(bool isEnabled) {
+    isMeasurementModeEnabled.value = isEnabled;
+    if (!isEnabled) {
+      isReticleInteracting.value = false;
+    }
+  }
+
   void setReticleProfile(ReticleProfile profile) {
     selectedReticleProfile.value = profile;
   }
@@ -212,11 +240,45 @@ class CalculatorController extends GetxController {
     }
   }
 
-  void openRangeCard() => Get.toNamed(AppRoutes.rangeCardList);
+  void openRangeCard() => _openShellTab(AppRoutes.rangeCardList);
 
-  void openDopeProfiles() => Get.toNamed(AppRoutes.dopeProfiles);
+  void openDopeProfiles() => _openShellTab(AppRoutes.dopeProfiles);
 
-  void openVisualRangeCard() => Get.toNamed(AppRoutes.visualRangeCard);
+  void openVisualRangeCard() => _openShellTab(AppRoutes.visualRangeCard);
+
+  void beginReticleInteraction({
+    required Offset localPosition,
+    required Size canvasSize,
+  }) {
+    final mainAxisPosition =
+        referenceDimension.value == TargetDimensionType.height
+        ? localPosition.dy
+        : localPosition.dx;
+    final mainAxisExtent =
+        referenceDimension.value == TargetDimensionType.height
+        ? canvasSize.height
+        : canvasSize.width;
+
+    final baselineFraction = _reticleMeasurementService
+        .positionFractionFromLocalPosition(
+          mainAxisPosition: mainAxisPosition,
+          mainAxisExtent: mainAxisExtent,
+        );
+
+    if (referenceDimension.value == TargetDimensionType.height) {
+      verticalBaselineFraction.value = baselineFraction;
+      verticalMeasurementFraction.value = baselineFraction;
+    } else {
+      horizontalBaselineFraction.value = baselineFraction;
+      horizontalMeasurementFraction.value = baselineFraction;
+    }
+
+    reticleHandleFraction.value = 0;
+    reticleReadingController.value = const TextEditingValue(
+      text: '',
+      selection: TextSelection.collapsed(offset: 0),
+    );
+  }
 
   void updateReticleFromLocalPosition({
     required Offset localPosition,
@@ -231,13 +293,31 @@ class CalculatorController extends GetxController {
         ? canvasSize.height
         : canvasSize.width;
 
-    final handleFraction = _reticleMeasurementService
-        .handleFractionFromLocalPosition(
+    final measurementFraction = _reticleMeasurementService
+        .positionFractionFromLocalPosition(
           mainAxisPosition: mainAxisPosition,
           mainAxisExtent: mainAxisExtent,
         );
-    final reading = _reticleMeasurementService.readingFromHandleFraction(
-      handleFraction,
+
+    if (referenceDimension.value == TargetDimensionType.height) {
+      verticalMeasurementFraction.value = measurementFraction;
+    } else {
+      horizontalMeasurementFraction.value = measurementFraction;
+    }
+
+    final handleFraction = (measurementFraction - activeBaselineFraction).abs();
+    if (handleFraction < _minimumInteractionFraction) {
+      reticleHandleFraction.value = 0;
+      reticleReadingController.value = const TextEditingValue(
+        text: '',
+        selection: TextSelection.collapsed(offset: 0),
+      );
+      return;
+    }
+
+    final reading = _reticleMeasurementService.readingFromPositionFractions(
+      baselineFraction: activeBaselineFraction,
+      measurementFraction: measurementFraction,
     );
 
     reticleHandleFraction.value = handleFraction;
@@ -350,8 +430,20 @@ class CalculatorController extends GetxController {
         ? MeasurementSystem.metric
         : MeasurementSystem.imperial;
     reticleReadingController.text = '1.0';
-    reticleHandleFraction.value = _reticleMeasurementService
-        .handleFractionFromReading(1.0);
+    final initialHandle = _reticleMeasurementService.handleFractionFromReading(
+      1.0,
+    );
+    reticleHandleFraction.value = initialHandle;
+    verticalMeasurementFraction.value =
+        (verticalBaselineFraction.value + initialHandle).clamp(
+          ReticleMeasurementService.minPositionFraction,
+          ReticleMeasurementService.maxPositionFraction,
+        );
+    horizontalMeasurementFraction.value =
+        (horizontalBaselineFraction.value + initialHandle).clamp(
+          ReticleMeasurementService.minPositionFraction,
+          ReticleMeasurementService.maxPositionFraction,
+        );
   }
 
   void _bindTextControllers() {
@@ -372,6 +464,7 @@ class CalculatorController extends GetxController {
       if (reading != null && reading > 0) {
         reticleHandleFraction.value = _reticleMeasurementService
             .handleFractionFromReading(reading);
+        _syncMeasurementFractionFromReading(reading);
       }
       _handleCalculationInputChange();
     });
@@ -404,11 +497,45 @@ class CalculatorController extends GetxController {
     }
   }
 
+  void _syncMeasurementFractionFromReading(double reading) {
+    final measurementFraction = _reticleMeasurementService
+        .measurementFractionFromBaselineAndReading(
+          baselineFraction: activeBaselineFraction,
+          reading: reading,
+          preferPositiveDirection:
+              activeMeasurementFraction >= activeBaselineFraction,
+        );
+
+    if (referenceDimension.value == TargetDimensionType.height) {
+      verticalMeasurementFraction.value = measurementFraction;
+    } else {
+      horizontalMeasurementFraction.value = measurementFraction;
+    }
+  }
+
   bool _inputIsEmptyForSelectedDimension() {
     return switch (referenceDimension.value) {
       TargetDimensionType.height =>
         manualTargetHeightInput.value.trim().isEmpty,
       TargetDimensionType.width => manualTargetWidthInput.value.trim().isEmpty,
     };
+  }
+
+  void setReticleInteractionActive(bool isActive) {
+    if (!isMeasurementModeEnabled.value && isActive) {
+      return;
+    }
+    if (isReticleInteracting.value == isActive) {
+      return;
+    }
+    isReticleInteracting.value = isActive;
+  }
+
+  void _openShellTab(String route) {
+    if (Get.isRegistered<AppShellController>()) {
+      Get.find<AppShellController>().selectRoute(route);
+      return;
+    }
+    Get.toNamed(AppRoutes.home, arguments: route);
   }
 }
