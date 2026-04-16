@@ -3,6 +3,7 @@ import 'package:get/get.dart';
 import 'package:milexact/app/routes/app_routes.dart';
 import 'package:milexact/app/theme/app_colors.dart';
 import 'package:milexact/data/models/enums.dart';
+import 'package:milexact/data/models/target_marker.dart';
 import 'package:milexact/modules/visual_range_card/controllers/visual_range_card_controller.dart';
 import 'package:milexact/modules/visual_range_card/widgets/visual_range_card_canvas.dart';
 import 'package:milexact/services/visual_range_card_service.dart';
@@ -28,6 +29,9 @@ class VisualRangeCardScreen extends GetView<VisualRangeCardController> {
         if (card == null) {
           return const Center(child: CircularProgressIndicator());
         }
+        final renderCard = card.copyWith(
+          targetMarkers: controller.targetMarkers,
+        );
         return SingleChildScrollView(
           physics: controller.isDrawModeEnabled.value
               ? const NeverScrollableScrollPhysics()
@@ -183,73 +187,55 @@ class VisualRangeCardScreen extends GetView<VisualRangeCardController> {
                     //   ),
                     // ],
                     const SizedBox(height: AppSpacing.md),
-                    SizedBox(
-                      height: 300,
-                      child: VisualRangeCardCanvas(
-                        card: card,
-                        draftTerrainPoints: controller.draftTerrainPoints
-                            .toList(growable: false),
-                        editorMode: controller.editorMode.value,
-                        interactionEnabled: controller.isDrawModeEnabled.value,
-                        visualRangeCardService:
-                            Get.find<VisualRangeCardService>(),
-                        onTapDown: (localPosition, size) {
-                          controller.handleTap(
-                            size: size,
-                            localPosition: localPosition,
-                          );
-                        },
-                        onPanStart: (localPosition, size) {
-                          controller.handlePanStart(
-                            size: size,
-                            localPosition: localPosition,
-                          );
-                        },
-                        onPanUpdate: (localPosition, size) {
-                          controller.handlePanUpdate(
-                            size: size,
-                            localPosition: localPosition,
-                          );
-                        },
-                        onPanEnd: controller.handlePanEnd,
-                      ),
-                    ),
-                  ],
-                ),
-              ),
-              const SizedBox(height: AppSpacing.md),
-              SectionCard(
-                child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    Text(
-                      'Target Markers',
-                      style: Theme.of(context).textTheme.titleLarge,
-                    ),
-                    const SizedBox(height: AppSpacing.sm),
-                    if (controller.targetMarkers.isEmpty)
-                      const EmptyStateView(
-                        title: 'No markers',
-                        description:
-                            'Use Marker mode and tap the plot to place targets.',
-                        icon: Icons.track_changes_outlined,
-                      )
-                    else
-                      ...controller.targetMarkers.map(
-                        (marker) => Padding(
-                          padding: const EdgeInsets.only(bottom: AppSpacing.sm),
-                          child: _EditableRow(
-                            title: marker.label,
-                            subtitle:
-                                '${controller.distanceLabel(marker)} • ${AppFormatters.number(marker.angle)}°',
-                            onEdit: () => _editMarker(
-                              marker.id,
-                              marker.label,
-                              marker.notes,
-                            ),
-                            onDelete: () => controller.removeMarker(marker.id),
+                    LayoutBuilder(
+                      builder: (context, constraints) {
+                        final plotHeight = (constraints.maxWidth * (290 / 400))
+                            .clamp(260.0, 360.0);
+                        return SizedBox(
+                          height: plotHeight,
+                          child: VisualRangeCardCanvas(
+                            card: renderCard,
+                            draftTerrainPoints: controller.draftTerrainPoints
+                                .toList(growable: false),
+                            editorMode: controller.editorMode.value,
+                            interactionEnabled:
+                                controller.isDrawModeEnabled.value,
+                            maxDistanceMeters: controller.displayMaxDistance,
+                            visualRangeCardService:
+                                Get.find<VisualRangeCardService>(),
+                            onTapDown: (localPosition, size) {
+                              controller.handleTap(
+                                size: size,
+                                localPosition: localPosition,
+                              );
+                            },
+                            onPanStart: (localPosition, size) {
+                              controller.handlePanStart(
+                                size: size,
+                                localPosition: localPosition,
+                              );
+                            },
+                            onPanUpdate: (localPosition, size) {
+                              controller.handlePanUpdate(
+                                size: size,
+                                localPosition: localPosition,
+                              );
+                            },
+                            onPanEnd: () {
+                              controller.handlePanEnd();
+                            },
                           ),
-                        ),
+                        );
+                      },
+                    ),
+                    const SizedBox(height: AppSpacing.md),
+                    if (controller.targetMarkers.isEmpty)
+                      const _InlineMarkerEmptyState()
+                    else
+                      _MarkerControlPanel(
+                        markers: controller.targetMarkers,
+                        controller: controller,
+                        onEditMarker: _editMarker,
                       ),
                   ],
                 ),
@@ -377,12 +363,325 @@ class VisualRangeCardScreen extends GetView<VisualRangeCardController> {
   String _instructionText(VisualRangeCardController controller) {
     final mode = controller.editorMode.value;
     if (!controller.isDrawModeEnabled.value) {
-      return 'Enable draw mode to place markers or paint terrain without scrolling the page.';
+      return 'Enable draw mode to position range card targets or paint terrain without scrolling the page.';
     }
     if (mode == VisualEditorMode.marker) {
-      return 'Tap the plot to place targets. Drag markers to adjust.';
+      return 'Range card targets appear here automatically. Drag them to adjust placement.';
     }
     return 'Draw on the map — tap for points or drag to paint ${mode.label.toLowerCase()}.';
+  }
+}
+
+class _InlineMarkerEmptyState extends StatelessWidget {
+  const _InlineMarkerEmptyState();
+
+  @override
+  Widget build(BuildContext context) {
+    return Container(
+      padding: const EdgeInsets.all(AppSpacing.md),
+      decoration: BoxDecoration(
+        color: AppColors.surfaceAlt.withValues(alpha: 0.45),
+        borderRadius: BorderRadius.circular(16),
+        border: Border.all(color: AppColors.border.withValues(alpha: 0.6)),
+      ),
+      child: Row(
+        children: [
+          const Icon(
+            Icons.track_changes_outlined,
+            color: AppColors.textMuted,
+            size: 18,
+          ),
+          const SizedBox(width: AppSpacing.sm),
+          Expanded(
+            child: Text(
+              'Save targets to the Range Card first, then they will appear here for quick angle movement.',
+              style: Theme.of(
+                context,
+              ).textTheme.bodySmall?.copyWith(color: AppColors.textMuted),
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+}
+
+class _MarkerControlPanel extends StatelessWidget {
+  const _MarkerControlPanel({
+    required this.markers,
+    required this.controller,
+    required this.onEditMarker,
+  });
+
+  final List<TargetMarker> markers;
+  final VisualRangeCardController controller;
+  final Future<void> Function(String, String, String) onEditMarker;
+
+  @override
+  Widget build(BuildContext context) {
+    return Container(
+      decoration: BoxDecoration(
+        color: AppColors.surfaceAlt.withValues(alpha: 0.34),
+        borderRadius: BorderRadius.circular(18),
+        border: Border.all(color: AppColors.border.withValues(alpha: 0.5)),
+      ),
+      child: Column(
+        children: List.generate(markers.length, (index) {
+          final marker = markers[index];
+          return _MarkerControlRow(
+            marker: marker,
+            index: index,
+            controller: controller,
+            onEditMarker: onEditMarker,
+            showDivider: index < markers.length - 1,
+          );
+        }),
+      ),
+    );
+  }
+}
+
+class _MarkerControlRow extends StatelessWidget {
+  const _MarkerControlRow({
+    required this.marker,
+    required this.index,
+    required this.controller,
+    required this.onEditMarker,
+    required this.showDivider,
+  });
+
+  final TargetMarker marker;
+  final int index;
+  final VisualRangeCardController controller;
+  final Future<void> Function(String, String, String) onEditMarker;
+  final bool showDivider;
+
+  @override
+  Widget build(BuildContext context) {
+    final entry = controller.linkedRangeEntryForMarker(marker);
+    final summary = entry == null
+        ? '${controller.distanceLabel(marker)} • ${controller.markerAngleLabel(marker)}'
+        : '${entry.distanceMeters.round()}m • ${entry.distanceYards.round()}yd • ${AppFormatters.number(entry.reticleReading)} ${entry.reticleType.label}';
+
+    final content = Padding(
+      padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 12),
+      child: LayoutBuilder(
+        builder: (context, constraints) {
+          final isCompact = constraints.maxWidth < 620;
+          final info = InkWell(
+            borderRadius: BorderRadius.circular(12),
+            onTap: () => onEditMarker(marker.id, marker.label, marker.notes),
+            child: Padding(
+              padding: const EdgeInsets.symmetric(vertical: 4),
+              child: Row(
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  Container(
+                    width: 12,
+                    height: 12,
+                    decoration: BoxDecoration(
+                      color: _markerColor(index),
+                      shape: BoxShape.circle,
+                    ),
+                  ),
+                  const SizedBox(width: 12),
+                  Flexible(
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        Text(
+                          marker.label,
+                          maxLines: 1,
+                          overflow: TextOverflow.ellipsis,
+                          style: Theme.of(context).textTheme.titleMedium
+                              ?.copyWith(fontWeight: FontWeight.w800),
+                        ),
+                        const SizedBox(height: 2),
+                        Text(
+                          summary,
+                          maxLines: 1,
+                          overflow: TextOverflow.ellipsis,
+                          style: Theme.of(context).textTheme.bodyMedium
+                              ?.copyWith(color: AppColors.textMuted),
+                        ),
+                      ],
+                    ),
+                  ),
+                ],
+              ),
+            ),
+          );
+
+          final actions = Wrap(
+            spacing: 8,
+            runSpacing: 8,
+            alignment: WrapAlignment.end,
+            crossAxisAlignment: WrapCrossAlignment.center,
+            children: [
+              _MarkerPillLabel(label: controller.markerAngleLabel(marker)),
+              _MarkerIconAction(
+                tooltip: 'Rotate Left',
+                icon: Icons.rotate_left_rounded,
+                onTap: () => controller.adjustMarkerAngle(marker.id, -5),
+              ),
+              _MarkerIconAction(
+                tooltip: 'Rotate Right',
+                icon: Icons.rotate_right_rounded,
+                onTap: () => controller.adjustMarkerAngle(marker.id, 5),
+              ),
+              _MarkerPillAction(
+                label: 'CTR',
+                onTap: () => controller.centerMarkerAngle(marker.id),
+              ),
+              if (marker.linkedRangeCardEntryId == null)
+                _MarkerIconAction(
+                  tooltip: 'Delete',
+                  icon: Icons.delete_outline_rounded,
+                  onTap: () => controller.removeMarker(marker.id),
+                  isDestructive: true,
+                ),
+            ],
+          );
+
+          if (isCompact) {
+            return Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                info,
+                const SizedBox(height: 10),
+                Align(alignment: Alignment.centerRight, child: actions),
+              ],
+            );
+          }
+
+          return Row(
+            children: [
+              Expanded(child: info),
+              const SizedBox(width: 12),
+              actions,
+            ],
+          );
+        },
+      ),
+    );
+
+    return DecoratedBox(
+      decoration: BoxDecoration(
+        border: showDivider
+            ? Border(
+                bottom: BorderSide(
+                  color: AppColors.border.withValues(alpha: 0.42),
+                ),
+              )
+            : null,
+      ),
+      child: content,
+    );
+  }
+
+  Color _markerColor(int index) {
+    const colors = <Color>[
+      Color(0xFF4ADE80),
+      Color(0xFFF59E0B),
+      Color(0xFF60A8FB),
+      Color(0xFFF87171),
+      Color(0xFFA78BFA),
+      Color(0xFF34D399),
+      Color(0xFFFB923C),
+      Color(0xFFE879F9),
+    ];
+    return colors[index % colors.length];
+  }
+}
+
+class _MarkerPillLabel extends StatelessWidget {
+  const _MarkerPillLabel({required this.label});
+
+  final String label;
+
+  @override
+  Widget build(BuildContext context) {
+    return Container(
+      padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
+      decoration: BoxDecoration(
+        color: AppColors.surface.withValues(alpha: 0.72),
+        borderRadius: BorderRadius.circular(14),
+      ),
+      child: Text(
+        label,
+        style: Theme.of(context).textTheme.labelLarge?.copyWith(
+          color: AppColors.textMuted,
+          fontWeight: FontWeight.w800,
+        ),
+      ),
+    );
+  }
+}
+
+class _MarkerPillAction extends StatelessWidget {
+  const _MarkerPillAction({required this.label, required this.onTap});
+
+  final String label;
+  final VoidCallback onTap;
+
+  @override
+  Widget build(BuildContext context) {
+    return Material(
+      color: AppColors.surface.withValues(alpha: 0.72),
+      borderRadius: BorderRadius.circular(14),
+      child: InkWell(
+        borderRadius: BorderRadius.circular(14),
+        onTap: onTap,
+        child: Padding(
+          padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 10),
+          child: Text(
+            label,
+            style: Theme.of(context).textTheme.labelLarge?.copyWith(
+              color: AppColors.textMuted,
+              fontWeight: FontWeight.w800,
+            ),
+          ),
+        ),
+      ),
+    );
+  }
+}
+
+class _MarkerIconAction extends StatelessWidget {
+  const _MarkerIconAction({
+    required this.tooltip,
+    required this.icon,
+    required this.onTap,
+    this.isDestructive = false,
+  });
+
+  final String tooltip;
+  final IconData icon;
+  final VoidCallback onTap;
+  final bool isDestructive;
+
+  @override
+  Widget build(BuildContext context) {
+    return Tooltip(
+      message: tooltip,
+      child: Material(
+        color: AppColors.surface.withValues(alpha: 0.72),
+        borderRadius: BorderRadius.circular(14),
+        child: InkWell(
+          borderRadius: BorderRadius.circular(14),
+          onTap: onTap,
+          child: SizedBox(
+            width: 44,
+            height: 44,
+            child: Icon(
+              icon,
+              size: 22,
+              color: isDestructive ? AppColors.danger : AppColors.textMuted,
+            ),
+          ),
+        ),
+      ),
+    );
   }
 }
 
@@ -525,13 +824,13 @@ class _EditableRow extends StatelessWidget {
     required this.title,
     required this.subtitle,
     required this.onEdit,
-    required this.onDelete,
+    this.onDelete,
   });
 
   final String title;
   final String subtitle;
   final VoidCallback onEdit;
-  final VoidCallback onDelete;
+  final VoidCallback? onDelete;
 
   @override
   Widget build(BuildContext context) {
@@ -556,11 +855,12 @@ class _EditableRow extends StatelessWidget {
               onPressed: onEdit,
               icon: const Icon(Icons.edit_outlined),
             ),
-            IconButton(
-              tooltip: 'Delete',
-              onPressed: onDelete,
-              icon: const Icon(Icons.delete_outline_rounded),
-            ),
+            if (onDelete != null)
+              IconButton(
+                tooltip: 'Delete',
+                onPressed: onDelete,
+                icon: const Icon(Icons.delete_outline_rounded),
+              ),
           ],
         ),
       ),

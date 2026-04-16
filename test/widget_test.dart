@@ -68,19 +68,25 @@ void main() {
   group('VisualRangeCardService', () {
     final service = VisualRangeCardService();
 
-    test('converts marker position to and from offsets in semicircle', () {
+    test('converts marker position to and from offsets in fan plot', () {
       const size = Size(320, 320);
+      const maxDistanceMeters = 1000.0;
       final marker = service.markerFromOffset(
         id: 'm1',
         label: 'Target',
         localPosition: const Offset(160, 80),
         size: size,
+        maxDistanceMeters: maxDistanceMeters,
       );
-      final offset = service.offsetFromMarker(marker: marker, size: size);
+      final offset = service.offsetFromMarker(
+        marker: marker,
+        size: size,
+        maxDistanceMeters: maxDistanceMeters,
+      );
 
       expect(marker.angle, closeTo(90, 2));
       expect(offset.dx, closeTo(160, 4));
-      expect(offset.dy, lessThan(300));
+      expect(offset.dy, closeTo(164.3, 1));
     });
   });
 }
