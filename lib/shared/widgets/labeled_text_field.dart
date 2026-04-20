@@ -22,6 +22,7 @@ class LabeledTextField extends StatelessWidget {
     this.autofillHints,
     this.autocorrect = true,
     this.enableSuggestions = true,
+    this.readOnly = false,
   }) : assert(
          controller == null || initialValue == null,
          'Provide either a controller or an initialValue, not both.',
@@ -44,6 +45,7 @@ class LabeledTextField extends StatelessWidget {
   final Iterable<String>? autofillHints;
   final bool autocorrect;
   final bool enableSuggestions;
+  final bool readOnly;
 
   @override
   Widget build(BuildContext context) {
@@ -65,6 +67,7 @@ class LabeledTextField extends StatelessWidget {
           autofillHints: autofillHints,
           autocorrect: autocorrect,
           enableSuggestions: enableSuggestions,
+          readOnly: readOnly,
           decoration: InputDecoration(
             hintText: hint,
             errorText: errorText,

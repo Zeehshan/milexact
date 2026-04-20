@@ -12,19 +12,8 @@ class PresetsRepository extends GetxService {
   final RxList<TargetPreset> presets = <TargetPreset>[].obs;
 
   Future<PresetsRepository> init() async {
-    if (_storage.categoriesBox.isEmpty) {
-      await _storage.categoriesBox.putAll({
-        for (final category in SeedData.defaultCategories())
-          category.id: category.toJson(),
-      });
-    }
-
-    if (_storage.presetsBox.isEmpty) {
-      await _storage.presetsBox.putAll({
-        for (final preset in SeedData.defaultPresets())
-          preset.id: preset.toJson(),
-      });
-    }
+    await _mergeBuiltInCategories();
+    await _mergeBuiltInPresets();
 
     _reload();
     return this;
@@ -75,6 +64,32 @@ class PresetsRepository extends GetxService {
   Future<void> deletePreset(String presetId) async {
     await _storage.presetsBox.delete(presetId);
     _reload();
+  }
+
+  Future<void> _mergeBuiltInCategories() async {
+    final existingIds = _storage.categoriesBox.keys
+        .map((key) => key.toString())
+        .toSet();
+    final missing = {
+      for (final category in SeedData.defaultCategories())
+        if (!existingIds.contains(category.id)) category.id: category.toJson(),
+    };
+    if (missing.isNotEmpty) {
+      await _storage.categoriesBox.putAll(missing);
+    }
+  }
+
+  Future<void> _mergeBuiltInPresets() async {
+    final existingIds = _storage.presetsBox.keys
+        .map((key) => key.toString())
+        .toSet();
+    final missing = {
+      for (final preset in SeedData.defaultPresets())
+        if (!existingIds.contains(preset.id)) preset.id: preset.toJson(),
+    };
+    if (missing.isNotEmpty) {
+      await _storage.presetsBox.putAll(missing);
+    }
   }
 
   void _reload() {

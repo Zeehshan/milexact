@@ -591,11 +591,10 @@ class VisualRangeCardController extends GetxController {
   }
 
   TargetMarker _markerFromRangeEntry(RangeCardEntry entry) {
+    final targetName = entry.targetName.trim();
     return TargetMarker(
       id: entry.id,
-      label: entry.targetPlacementLabel.trim().isEmpty
-          ? entry.targetName
-          : entry.targetPlacementLabel.trim(),
+      label: targetName.isEmpty ? 'Unknown Target' : targetName,
       angle: entry.targetPlacementAngle,
       distance: entry.distanceMeters,
       linkedRangeCardEntryId: entry.id,

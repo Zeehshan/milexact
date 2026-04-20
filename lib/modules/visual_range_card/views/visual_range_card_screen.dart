@@ -282,28 +282,32 @@ class VisualRangeCardScreen extends GetView<VisualRangeCardController> {
     );
   }
 
-  Future<void> _editMarker(
-    String markerId,
-    String currentLabel,
-    String currentNotes,
-  ) async {
-    final labelController = TextEditingController(text: currentLabel);
-    final notesController = TextEditingController(text: currentNotes);
+  Future<void> _editMarker(TargetMarker marker) async {
+    final linkedEntry = controller.linkedRangeEntryForMarker(marker);
+    final isLinkedMarker = linkedEntry != null;
+    final labelController = TextEditingController(
+      text: isLinkedMarker ? linkedEntry.targetPlacementLabel : marker.label,
+    );
+    final notesController = TextEditingController(text: marker.notes);
 
     final confirmed = await Get.dialog<bool>(
       AlertDialog(
-        title: const Text('Edit Marker'),
+        title: Text(isLinkedMarker ? 'Edit Placement' : 'Edit Marker'),
         content: Column(
           mainAxisSize: MainAxisSize.min,
           children: [
             TextField(
               controller: labelController,
-              decoration: const InputDecoration(labelText: 'Label'),
+              decoration: InputDecoration(
+                labelText: isLinkedMarker ? 'Placement / Location' : 'Label',
+              ),
             ),
             const SizedBox(height: AppSpacing.md),
             TextField(
               controller: notesController,
-              decoration: const InputDecoration(labelText: 'Notes'),
+              decoration: InputDecoration(
+                labelText: isLinkedMarker ? 'Terrain Notes' : 'Notes',
+              ),
             ),
           ],
         ),
@@ -322,7 +326,7 @@ class VisualRangeCardScreen extends GetView<VisualRangeCardController> {
 
     if (confirmed ?? false) {
       controller.renameMarker(
-        markerId: markerId,
+        markerId: marker.id,
         label: labelController.text,
         notes: notesController.text,
       );
@@ -415,7 +419,7 @@ class _MarkerControlPanel extends StatelessWidget {
 
   final List<TargetMarker> markers;
   final VisualRangeCardController controller;
-  final Future<void> Function(String, String, String) onEditMarker;
+  final Future<void> Function(TargetMarker) onEditMarker;
 
   @override
   Widget build(BuildContext context) {
@@ -453,12 +457,14 @@ class _MarkerControlRow extends StatelessWidget {
   final TargetMarker marker;
   final int index;
   final VisualRangeCardController controller;
-  final Future<void> Function(String, String, String) onEditMarker;
+  final Future<void> Function(TargetMarker) onEditMarker;
   final bool showDivider;
 
   @override
   Widget build(BuildContext context) {
     final entry = controller.linkedRangeEntryForMarker(marker);
+    final placementText = entry?.targetPlacementLabel.trim() ?? '';
+    final terrainNotes = entry?.terrainNotes.trim() ?? marker.notes.trim();
     final summary = entry == null
         ? '${controller.distanceLabel(marker)} • ${controller.markerAngleLabel(marker)}'
         : '${entry.distanceMeters.round()}m • ${entry.distanceYards.round()}yd • ${AppFormatters.number(entry.reticleReading)} ${entry.reticleType.label}';
@@ -470,7 +476,7 @@ class _MarkerControlRow extends StatelessWidget {
           final isCompact = constraints.maxWidth < 620;
           final info = InkWell(
             borderRadius: BorderRadius.circular(12),
-            onTap: () => onEditMarker(marker.id, marker.label, marker.notes),
+            onTap: () => onEditMarker(marker),
             child: Padding(
               padding: const EdgeInsets.symmetric(vertical: 4),
               child: Row(
@@ -504,6 +510,26 @@ class _MarkerControlRow extends StatelessWidget {
                           style: Theme.of(context).textTheme.bodyMedium
                               ?.copyWith(color: AppColors.textMuted),
                         ),
+                        if (placementText.isNotEmpty) ...[
+                          const SizedBox(height: 4),
+                          Text(
+                            'Location: $placementText',
+                            maxLines: 1,
+                            overflow: TextOverflow.ellipsis,
+                            style: Theme.of(context).textTheme.bodySmall
+                                ?.copyWith(color: AppColors.textMuted),
+                          ),
+                        ],
+                        if (terrainNotes.isNotEmpty) ...[
+                          const SizedBox(height: 2),
+                          Text(
+                            'Notes: ${AppFormatters.preview(terrainNotes, maxLength: 80)}',
+                            maxLines: 2,
+                            overflow: TextOverflow.ellipsis,
+                            style: Theme.of(context).textTheme.bodySmall
+                                ?.copyWith(color: AppColors.textMuted),
+                          ),
+                        ],
                       ],
                     ),
                   ),

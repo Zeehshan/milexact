@@ -299,6 +299,8 @@ class CalculatorScreen extends GetView<CalculatorController> {
                       reticleType: controller.selectedReticleType.value,
                       reticleProfile: controller.selectedReticleProfile.value,
                       readingLabel: controller.reticleReadingInput.value,
+                      lineThickness: controller.reticleLineThickness.value,
+                      overlayOpacity: controller.reticleOverlayOpacity.value,
                       interactionEnabled:
                           controller.isMeasurementModeEnabled.value,
                       onInteractionActiveChanged:
@@ -309,12 +311,38 @@ class CalculatorScreen extends GetView<CalculatorController> {
                           canvasSize: size,
                         );
                       },
+                      onBaselineUpdate: (localPosition, size) {
+                        controller.updateReticleBaselineFromLocalPosition(
+                          localPosition: localPosition,
+                          canvasSize: size,
+                        );
+                      },
                       onInteractionUpdate: (localPosition, size) {
                         controller.updateReticleFromLocalPosition(
                           localPosition: localPosition,
                           canvasSize: size,
                         );
                       },
+                    ),
+                    const SizedBox(height: AppSpacing.sm),
+                    _ReticleControlSlider(
+                      label: 'Connector Thickness',
+                      value: controller.reticleLineThickness.value,
+                      min: 0.8,
+                      max: 3.0,
+                      valueText:
+                          '${controller.reticleLineThickness.value.toStringAsFixed(1)}x',
+                      onChanged: controller.setReticleLineThickness,
+                    ),
+                    const SizedBox(height: AppSpacing.sm),
+                    _ReticleControlSlider(
+                      label: 'Connector Opacity',
+                      value: controller.reticleOverlayOpacity.value,
+                      min: 0.35,
+                      max: 1.0,
+                      valueText:
+                          '${(controller.reticleOverlayOpacity.value * 100).round()}%',
+                      onChanged: controller.setReticleOverlayOpacity,
                     ),
                     const SizedBox(height: AppSpacing.md),
                     Text(
@@ -424,6 +452,47 @@ class CalculatorScreen extends GetView<CalculatorController> {
           ),
         );
       }),
+    );
+  }
+}
+
+class _ReticleControlSlider extends StatelessWidget {
+  const _ReticleControlSlider({
+    required this.label,
+    required this.value,
+    required this.min,
+    required this.max,
+    required this.valueText,
+    required this.onChanged,
+  });
+
+  final String label;
+  final double value;
+  final double min;
+  final double max;
+  final String valueText;
+  final ValueChanged<double> onChanged;
+
+  @override
+  Widget build(BuildContext context) {
+    final theme = Theme.of(context);
+
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        Row(
+          children: [
+            Expanded(child: Text(label, style: theme.textTheme.titleSmall)),
+            Text(valueText, style: theme.textTheme.labelMedium),
+          ],
+        ),
+        Slider(
+          value: value.clamp(min, max),
+          min: min,
+          max: max,
+          onChanged: onChanged,
+        ),
+      ],
     );
   }
 }

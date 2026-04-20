@@ -75,59 +75,91 @@ class RangeCardEditScreen extends GetView<RangeCardEditController> {
                     const SizedBox(height: AppSpacing.md),
                     LabeledTextField(
                       controller: controller.targetLabelController,
-                      label: 'Target Label',
-                      hint: 'Target label',
+                      label: 'Target Name',
+                      hint: 'Target name',
+                      readOnly: true,
+                      suffixIcon: const Icon(Icons.lock_outline_rounded),
+                    ),
+                    const SizedBox(height: AppSpacing.xs),
+                    Text(
+                      'Target identity stays fixed. Use placement / location below for references like tree line, berm, or road.',
+                      style: theme.textTheme.bodySmall?.copyWith(
+                        color: theme.colorScheme.onSurfaceVariant,
+                      ),
                     ),
                     const SizedBox(height: AppSpacing.md),
-                    DropdownButtonFormField<String?>(
-                      initialValue: controller.selectedDopeProfileId.value,
-                      items: [
-                        const DropdownMenuItem<String?>(
-                          value: null,
-                          child: Text('No DOPE profile'),
-                        ),
-                        ...controller.profiles.map(
-                          (profile) => DropdownMenuItem<String?>(
-                            value: profile.id,
-                            child: Text(profile.rifleName),
+                    Container(
+                      width: double.infinity,
+                      padding: const EdgeInsets.all(AppSpacing.md),
+                      decoration: BoxDecoration(
+                        color: theme.colorScheme.surfaceContainerHighest
+                            .withValues(alpha: 0.22),
+                        borderRadius: BorderRadius.circular(16),
+                        border: Border.all(
+                          color: theme.colorScheme.outline.withValues(
+                            alpha: 0.22,
                           ),
                         ),
-                      ],
-                      onChanged: controller.setDopeProfile,
-                      decoration: const InputDecoration(
-                        labelText: 'Saved DOPE Profile',
+                      ),
+                      child: Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          Text(
+                            'Saved DOPE Source',
+                            style: theme.textTheme.titleMedium,
+                          ),
+                          const SizedBox(height: AppSpacing.xs),
+                          Text(
+                            controller.autoDopeStatusText,
+                            style: theme.textTheme.bodyMedium?.copyWith(
+                              color: theme.colorScheme.onSurfaceVariant,
+                            ),
+                          ),
+                          const SizedBox(height: AppSpacing.md),
+                          Wrap(
+                            spacing: AppSpacing.sm,
+                            runSpacing: AppSpacing.sm,
+                            children: [
+                              _SummaryStat(
+                                label: 'PROFILE',
+                                value: controller.autoDopeProfileLabel,
+                              ),
+                              _SummaryStat(
+                                label: 'MATCHED ROW',
+                                value: controller.autoDopeRowLabel,
+                              ),
+                            ],
+                          ),
+                          if (controller.matchedProfileEntry != null) ...[
+                            const SizedBox(height: AppSpacing.sm),
+                            Align(
+                              alignment: Alignment.centerLeft,
+                              child: TextButton.icon(
+                                onPressed: controller.applyAutoMatchedDope,
+                                icon: const Icon(Icons.auto_fix_high_rounded),
+                                label: const Text('Apply Matched DOPE'),
+                              ),
+                            ),
+                          ],
+                        ],
                       ),
                     ),
-                    if (controller.selectedProfileEntries.isNotEmpty) ...[
-                      const SizedBox(height: AppSpacing.md),
-                      DropdownButtonFormField<String>(
-                        key: ValueKey(
-                          controller.selectedDopeProfileId.value ??
-                              'no-profile-selected',
-                        ),
-                        initialValue: controller.selectedDopeEntryId.value,
-                        items: controller.selectedProfileEntries
-                            .map(
-                              (row) => DropdownMenuItem<String>(
-                                value: row.id,
-                                child: Text(
-                                  '${AppFormatters.number(row.distanceValue)} ${row.distanceUnit.shortLabel} • ${row.dropValue}',
-                                ),
-                              ),
-                            )
-                            .toList(growable: false),
-                        onChanged: controller.setDopeEntry,
-                        decoration: const InputDecoration(
-                          labelText: 'Saved DOPE Row',
-                        ),
-                      ),
-                    ],
                     const SizedBox(height: AppSpacing.md),
                     LabeledTextField(
                       controller: controller.dopeValueController,
                       label: 'DOPE Value',
-                      hint: 'Manual DOPE or selected profile row',
+                      hint:
+                          'Auto-filled from saved profile or override manually',
                     ),
+                    if (controller.hasManualDopeOverride) ...[
+                      const SizedBox(height: AppSpacing.xs),
+                      Text(
+                        'Manual override active. Saved profile match is shown above for reference.',
+                        style: theme.textTheme.bodySmall?.copyWith(
+                          color: theme.colorScheme.onSurfaceVariant,
+                        ),
+                      ),
+                    ],
                     const SizedBox(height: AppSpacing.md),
                     Text('Wind Value', style: theme.textTheme.titleMedium),
                     const SizedBox(height: AppSpacing.xs),
@@ -164,7 +196,7 @@ class RangeCardEditScreen extends GetView<RangeCardEditController> {
                     const SizedBox(height: AppSpacing.md),
                     LabeledTextField(
                       controller: controller.targetPlacementLabelController,
-                      label: 'Target Placement Label',
+                      label: 'Placement / Location',
                       hint: 'Tree line left, berm center...',
                     ),
                     const SizedBox(height: AppSpacing.md),

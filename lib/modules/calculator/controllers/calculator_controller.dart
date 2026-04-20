@@ -45,6 +45,8 @@ class CalculatorController extends GetxController {
   final displayPreference = DistanceDisplayPreference.both.obs;
   final liveCalculationEnabled = true.obs;
   final isMeasurementModeEnabled = false.obs;
+  final reticleLineThickness = 1.2.obs;
+  final reticleOverlayOpacity = 1.0.obs;
   final reticleHandleFraction = 0.12.obs;
   final verticalBaselineFraction =
       ReticleMeasurementService.zeroLineFraction.obs;
@@ -211,6 +213,14 @@ class CalculatorController extends GetxController {
     }
   }
 
+  void setReticleLineThickness(double value) {
+    reticleLineThickness.value = value.clamp(0.8, 3.0);
+  }
+
+  void setReticleOverlayOpacity(double value) {
+    reticleOverlayOpacity.value = value.clamp(0.35, 1.0);
+  }
+
   void setReticleProfile(ReticleProfile profile) {
     selectedReticleProfile.value = profile;
   }
@@ -247,6 +257,16 @@ class CalculatorController extends GetxController {
   void openVisualRangeCard() => _openShellTab(AppRoutes.visualRangeCard);
 
   void beginReticleInteraction({
+    required Offset localPosition,
+    required Size canvasSize,
+  }) {
+    updateReticleBaselineFromLocalPosition(
+      localPosition: localPosition,
+      canvasSize: canvasSize,
+    );
+  }
+
+  void updateReticleBaselineFromLocalPosition({
     required Offset localPosition,
     required Size canvasSize,
   }) {

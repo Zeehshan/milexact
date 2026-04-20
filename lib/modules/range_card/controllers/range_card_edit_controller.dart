@@ -8,16 +8,19 @@ import 'package:milexact/data/models/range_card_entry.dart';
 import 'package:milexact/data/repositories/dope_profiles_repository.dart';
 import 'package:milexact/data/repositories/range_card_repository.dart';
 import 'package:milexact/modules/app_shell/controllers/app_shell_controller.dart';
+import 'package:milexact/services/unit_conversion_service.dart';
 import 'package:milexact/shared/utils/id_generator.dart';
 
 class RangeCardEditController extends GetxController {
   RangeCardEditController(
     this._rangeCardRepository,
     this._dopeProfilesRepository,
+    this._unitConversionService,
   );
 
   final RangeCardRepository _rangeCardRepository;
   final DopeProfilesRepository _dopeProfilesRepository;
+  final UnitConversionService _unitConversionService;
 
   final targetLabelController = TextEditingController();
   final dopeValueController = TextEditingController();
@@ -36,16 +39,96 @@ class RangeCardEditController extends GetxController {
 
   RxList<DopeProfile> get profiles => _dopeProfilesRepository.profiles;
 
-  DopeProfile? get selectedProfile {
-    final id = selectedDopeProfileId.value;
-    if (id == null) {
-      return null;
+  DopeProfile? get resolvedProfile {
+    final activeProfile = profiles.firstWhereOrNull(
+      (profile) => profile.isActive,
+    );
+    if (activeProfile != null) {
+      return activeProfile;
     }
-    return _dopeProfilesRepository.profileById(id);
+
+    final persistedProfileId = entry.selectedDopeProfileId;
+    if (persistedProfileId != null) {
+      final persisted = _dopeProfilesRepository.profileById(persistedProfileId);
+      if (persisted != null) {
+        return persisted;
+      }
+    }
+
+    if (profiles.length == 1) {
+      return profiles.first;
+    }
+
+    return null;
   }
 
-  List<DopeProfileEntry> get selectedProfileEntries {
-    return selectedProfile?.entries ?? const <DopeProfileEntry>[];
+  DopeProfileEntry? get matchedProfileEntry {
+    final profile = resolvedProfile;
+    if (profile == null || profile.entries.isEmpty) {
+      return null;
+    }
+
+    final targetDistanceMeters = entry.distanceMeters;
+    DopeProfileEntry? bestEntry;
+    var bestDelta = double.infinity;
+
+    for (final profileEntry in profile.entries) {
+      final entryDistanceMeters = _unitConversionService.toMeters(
+        profileEntry.distanceValue,
+        profileEntry.distanceUnit,
+      );
+      final delta = (entryDistanceMeters - targetDistanceMeters).abs();
+      if (delta < bestDelta) {
+        bestDelta = delta;
+        bestEntry = profileEntry;
+      }
+    }
+
+    return bestEntry;
+  }
+
+  bool get hasManualDopeOverride {
+    final matchedEntry = matchedProfileEntry;
+    if (matchedEntry == null) {
+      return dopeValueController.text.trim().isNotEmpty;
+    }
+    final currentDope = dopeValueController.text.trim();
+    return currentDope.isNotEmpty &&
+        currentDope != matchedEntry.dropValue.trim();
+  }
+
+  String get autoDopeStatusText {
+    final profile = resolvedProfile;
+    final matchedEntry = matchedProfileEntry;
+    if (profile == null) {
+      return profiles.isEmpty
+          ? 'No saved DOPE profiles found.'
+          : 'No active DOPE profile found. Mark one profile active in DOPE Profiles.';
+    }
+    if (matchedEntry == null) {
+      return 'The active profile has no saved distance rows.';
+    }
+    return 'Auto-matched from ${profile.rifleName} based on ${entry.distanceMeters.round()}m target distance.';
+  }
+
+  String get autoDopeProfileLabel {
+    final profile = resolvedProfile;
+    if (profile == null) {
+      return '--';
+    }
+    final details = <String>[
+      profile.rifleName,
+      if (profile.caliber.trim().isNotEmpty) profile.caliber.trim(),
+    ];
+    return details.join(' • ');
+  }
+
+  String get autoDopeRowLabel {
+    final matchedEntry = matchedProfileEntry;
+    if (matchedEntry == null) {
+      return '--';
+    }
+    return '${matchedEntry.distanceValue.toStringAsFixed(matchedEntry.distanceValue % 1 == 0 ? 0 : 1)} ${matchedEntry.distanceUnit.shortLabel} • ${matchedEntry.dropValue}';
   }
 
   @override
@@ -64,7 +147,7 @@ class RangeCardEditController extends GetxController {
     selectedWindValueType.value = entry.windValueType;
     targetPlacementAngle.value = entry.targetPlacementAngle;
     selectedDopeProfileId.value = entry.selectedDopeProfileId;
-    _selectMatchingDopeEntry();
+    _syncAutoDope();
   }
 
   @override
@@ -85,37 +168,12 @@ class RangeCardEditController extends GetxController {
     targetPlacementAngle.value = value;
   }
 
-  void setDopeProfile(String? profileId) {
-    selectedDopeProfileId.value = profileId;
-    if (profileId == null) {
-      selectedDopeEntryId.value = null;
-      return;
-    }
-
-    final profile = _dopeProfilesRepository.profileById(profileId);
-    if (profile != null && profile.entries.isNotEmpty) {
-      final firstEntry = profile.entries.first;
-      selectedDopeEntryId.value = firstEntry.id;
-      dopeValueController.text = firstEntry.dropValue;
-    }
-  }
-
-  void setDopeEntry(String? entryId) {
-    selectedDopeEntryId.value = entryId;
-    if (entryId == null) {
-      return;
-    }
-
-    for (final entry in selectedProfileEntries) {
-      if (entry.id == entryId) {
-        dopeValueController.text = entry.dropValue;
-        return;
-      }
-    }
+  void applyAutoMatchedDope() {
+    _applyMatchedDope(force: true);
   }
 
   Future<void> save() async {
-    final targetName = targetLabelController.text.trim();
+    final targetName = entry.targetName.trim();
     if (targetName.isEmpty) {
       errorMessage.value = 'Target label is required.';
       return;
@@ -124,7 +182,7 @@ class RangeCardEditController extends GetxController {
     final updated = entry.copyWith(
       targetName: targetName,
       dopeValue: dopeValueController.text.trim(),
-      selectedDopeProfileId: selectedDopeProfileId.value,
+      selectedDopeProfileId: resolvedProfile?.id,
       windValueType: selectedWindValueType.value,
       windDirectionClock: windDirectionClockController.text.trim().isEmpty
           ? '12'
@@ -151,21 +209,41 @@ class RangeCardEditController extends GetxController {
     Get.toNamed(AppRoutes.visualRangeCard, arguments: entry);
   }
 
-  void _selectMatchingDopeEntry() {
-    final currentProfile = selectedProfile;
-    if (currentProfile == null) {
+  void _syncAutoDope() {
+    selectedDopeProfileId.value = resolvedProfile?.id;
+    selectedDopeEntryId.value = matchedProfileEntry?.id;
+    _applyMatchedDope(force: _shouldAutoApplyMatchedDope());
+  }
+
+  bool _shouldAutoApplyMatchedDope() {
+    final currentValue = entry.dopeValue.trim();
+    if (currentValue.isEmpty) {
+      return true;
+    }
+
+    final profile = resolvedProfile;
+    if (profile == null) {
+      return false;
+    }
+
+    final matchesSavedProfileRow = profile.entries.any(
+      (row) => row.dropValue.trim() == currentValue,
+    );
+    return entry.selectedDopeProfileId == profile.id && matchesSavedProfileRow;
+  }
+
+  void _applyMatchedDope({required bool force}) {
+    final matchedEntry = matchedProfileEntry;
+    if (matchedEntry == null) {
+      if (force) {
+        dopeValueController.clear();
+      }
       return;
     }
 
-    for (final row in currentProfile.entries) {
-      if (row.dropValue == entry.dopeValue) {
-        selectedDopeEntryId.value = row.id;
-        return;
-      }
-    }
-
-    if (currentProfile.entries.isNotEmpty) {
-      selectedDopeEntryId.value = currentProfile.entries.first.id;
+    final nextValue = matchedEntry.dropValue.trim();
+    if (force || dopeValueController.text.trim().isEmpty) {
+      dopeValueController.text = nextValue;
     }
   }
 

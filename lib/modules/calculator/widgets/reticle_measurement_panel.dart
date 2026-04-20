@@ -6,6 +6,9 @@ import 'package:milexact/data/models/enums.dart';
 
 const double _reticleInnerRadiusFactor = 0.40;
 const double _reticleOuterRadiusMultiplier = 1.15;
+const double _guideGrabThreshold = 18.0;
+
+enum _GuideDragTarget { baseline, measurement }
 
 class ReticleMeasurementPanel extends StatefulWidget {
   const ReticleMeasurementPanel({
@@ -16,9 +19,12 @@ class ReticleMeasurementPanel extends StatefulWidget {
     required this.reticleType,
     required this.reticleProfile,
     required this.readingLabel,
+    required this.lineThickness,
+    required this.overlayOpacity,
     required this.interactionEnabled,
     required this.onInteractionActiveChanged,
     required this.onInteractionStart,
+    required this.onBaselineUpdate,
     required this.onInteractionUpdate,
     this.motionDuration = const Duration(milliseconds: 72),
     this.motionCurve = Curves.easeOutCubic,
@@ -30,9 +36,12 @@ class ReticleMeasurementPanel extends StatefulWidget {
   final ReticleType reticleType;
   final ReticleProfile reticleProfile;
   final String readingLabel;
+  final double lineThickness;
+  final double overlayOpacity;
   final bool interactionEnabled;
   final ValueChanged<bool> onInteractionActiveChanged;
   final void Function(Offset localPosition, Size size) onInteractionStart;
+  final void Function(Offset localPosition, Size size) onBaselineUpdate;
   final void Function(Offset localPosition, Size size) onInteractionUpdate;
   final Duration motionDuration;
   final Curve motionCurve;
@@ -51,6 +60,7 @@ class _ReticleMeasurementPanelState extends State<ReticleMeasurementPanel>
   Tween<double>? _baselineTween;
   Tween<double>? _measurementTween;
   int? _activePointer;
+  _GuideDragTarget? _activeDragTarget;
 
   @override
   void initState() {
@@ -78,6 +88,7 @@ class _ReticleMeasurementPanelState extends State<ReticleMeasurementPanel>
 
     if (oldWidget.interactionEnabled && !widget.interactionEnabled) {
       _activePointer = null;
+      _activeDragTarget = null;
       widget.onInteractionActiveChanged(false);
     }
 
@@ -150,6 +161,8 @@ class _ReticleMeasurementPanelState extends State<ReticleMeasurementPanel>
                     reticleType: widget.reticleType,
                     reticleProfile: widget.reticleProfile,
                     readingLabel: widget.readingLabel,
+                    lineThickness: widget.lineThickness,
+                    overlayOpacity: widget.overlayOpacity,
                   ),
                 ),
               ],
@@ -163,10 +176,22 @@ class _ReticleMeasurementPanelState extends State<ReticleMeasurementPanel>
   void _handlePointerDown(PointerDownEvent event, Size size) {
     _activePointer = event.pointer;
     widget.onInteractionActiveChanged(true);
-    widget.onInteractionStart(
-      _clampInteractionToScope(event.localPosition, size),
-      size,
-    );
+    final localPosition = _clampInteractionToScope(event.localPosition, size);
+    final dragTarget = _resolveDragTarget(localPosition, size);
+    _activeDragTarget = dragTarget;
+
+    switch (dragTarget) {
+      case _GuideDragTarget.measurement:
+        widget.onInteractionUpdate(localPosition, size);
+        break;
+      case _GuideDragTarget.baseline:
+        widget.onBaselineUpdate(localPosition, size);
+        break;
+      default:
+        widget.onInteractionStart(localPosition, size);
+        _activeDragTarget = _GuideDragTarget.measurement;
+        break;
+    }
   }
 
   void _handlePointerMove(PointerMoveEvent event, Size size) {
@@ -174,10 +199,18 @@ class _ReticleMeasurementPanelState extends State<ReticleMeasurementPanel>
       return;
     }
 
-    widget.onInteractionUpdate(
-      _clampInteractionToScope(event.localPosition, size),
-      size,
-    );
+    final localPosition = _clampInteractionToScope(event.localPosition, size);
+    switch (_activeDragTarget) {
+      case _GuideDragTarget.baseline:
+        widget.onBaselineUpdate(localPosition, size);
+        break;
+      case _GuideDragTarget.measurement:
+        widget.onInteractionUpdate(localPosition, size);
+        break;
+      default:
+        widget.onInteractionUpdate(localPosition, size);
+        break;
+    }
   }
 
   void _handlePointerUp(PointerUpEvent event) {
@@ -186,6 +219,7 @@ class _ReticleMeasurementPanelState extends State<ReticleMeasurementPanel>
     }
 
     _activePointer = null;
+    _activeDragTarget = null;
     widget.onInteractionActiveChanged(false);
   }
 
@@ -195,7 +229,40 @@ class _ReticleMeasurementPanelState extends State<ReticleMeasurementPanel>
     }
 
     _activePointer = null;
+    _activeDragTarget = null;
     widget.onInteractionActiveChanged(false);
+  }
+
+  _GuideDragTarget? _resolveDragTarget(Offset localPosition, Size size) {
+    final baselinePosition = _axisPositionPx(widget.baselineFraction, size);
+    final measurementPosition = _axisPositionPx(
+      widget.measurementFraction,
+      size,
+    );
+    final touchPosition =
+        widget.referenceDimension == TargetDimensionType.height
+        ? localPosition.dy
+        : localPosition.dx;
+    final hasMeasurement =
+        (widget.measurementFraction - widget.baselineFraction).abs() > 0.001 &&
+        widget.readingLabel.trim().isNotEmpty;
+
+    if (hasMeasurement &&
+        (touchPosition - measurementPosition).abs() <= _guideGrabThreshold) {
+      return _GuideDragTarget.measurement;
+    }
+
+    if ((touchPosition - baselinePosition).abs() <= _guideGrabThreshold) {
+      return _GuideDragTarget.baseline;
+    }
+
+    return null;
+  }
+
+  double _axisPositionPx(double fraction, Size size) {
+    return widget.referenceDimension == TargetDimensionType.height
+        ? size.height * fraction
+        : size.width * fraction;
   }
 
   Offset _clampInteractionToScope(Offset localPosition, Size size) {
@@ -230,6 +297,8 @@ class ReticleMeasurementPainter extends CustomPainter {
     required this.reticleType,
     required this.reticleProfile,
     required this.readingLabel,
+    required this.lineThickness,
+    required this.overlayOpacity,
   });
 
   final TargetDimensionType referenceDimension;
@@ -238,12 +307,16 @@ class ReticleMeasurementPainter extends CustomPainter {
   final ReticleType reticleType;
   final ReticleProfile reticleProfile;
   final String readingLabel;
+  final double lineThickness;
+  final double overlayOpacity;
 
   @override
   void paint(Canvas canvas, Size size) {
     final center = Offset(size.width / 2, size.height / 2);
     final radius = size.shortestSide * _reticleInnerRadiusFactor;
     final scopeRadius = radius * _reticleOuterRadiusMultiplier;
+    final normalizedThickness = lineThickness.clamp(0.8, 3.0);
+    final normalizedOpacity = overlayOpacity.clamp(0.35, 1.0);
     final borderPaint = Paint()
       ..color = AppColors.border
       ..style = PaintingStyle.stroke
@@ -257,9 +330,9 @@ class ReticleMeasurementPainter extends CustomPainter {
       ..style = PaintingStyle.stroke
       ..strokeWidth = 1.2;
     final accentPaint = Paint()
-      ..color = AppColors.accent
+      ..color = AppColors.accent.withValues(alpha: normalizedOpacity)
       ..style = PaintingStyle.stroke
-      ..strokeWidth = 2.0;
+      ..strokeWidth = (normalizedThickness * 1.7).clamp(1.8, 4.0);
     final tickPaint = Paint()
       ..color = AppColors.primary.withValues(alpha: 0.52)
       ..strokeWidth = 1;
@@ -339,10 +412,21 @@ class ReticleMeasurementPainter extends CustomPainter {
     required Paint accentPaint,
   }) {
     final deltaFraction = (measurementFraction - baselineFraction).abs();
+    final normalizedOpacity = overlayOpacity.clamp(0.35, 1.0);
+    final connectorThickness = (lineThickness * 4.8).clamp(3.0, 12.0);
     final dashedPaint = Paint()
       ..color = AppColors.primary.withValues(alpha: 0.95)
       ..style = PaintingStyle.stroke
       ..strokeWidth = 2;
+    final measurementGuidePaint = Paint()
+      ..color = AppColors.accent
+      ..style = PaintingStyle.stroke
+      ..strokeWidth = 2.2;
+    final connectorPaint = Paint()
+      ..color = AppColors.accent.withValues(alpha: normalizedOpacity)
+      ..style = PaintingStyle.stroke
+      ..strokeWidth = connectorThickness
+      ..strokeCap = StrokeCap.square;
     final zeroFillPaint = Paint()
       ..color = AppColors.primary.withValues(alpha: 0.14)
       ..style = PaintingStyle.fill;
@@ -351,6 +435,12 @@ class ReticleMeasurementPainter extends CustomPainter {
       ..style = PaintingStyle.stroke
       ..strokeWidth = 1;
     final hasMeasurement = deltaFraction > 0.001 && readingLabel.isNotEmpty;
+    final zeroHandlePaint = Paint()
+      ..color = AppColors.primary.withValues(alpha: 0.96)
+      ..style = PaintingStyle.fill;
+    final measurementHandlePaint = Paint()
+      ..color = AppColors.accent
+      ..style = PaintingStyle.fill;
 
     final baselineHalfSpan = _horizontalHalfSpanForCircle(
       center: center,
@@ -382,6 +472,17 @@ class ReticleMeasurementPainter extends CustomPainter {
     );
     canvas.drawRRect(zeroRect, zeroFillPaint);
     canvas.drawRRect(zeroRect, zeroBorderPaint);
+    canvas.drawRRect(
+      RRect.fromRectAndRadius(
+        Rect.fromCenter(
+          center: Offset(center.dx, baselineY),
+          width: 22,
+          height: 6,
+        ),
+        const Radius.circular(2),
+      ),
+      zeroHandlePaint,
+    );
     _paintText(
       canvas,
       text: '0',
@@ -397,18 +498,34 @@ class ReticleMeasurementPainter extends CustomPainter {
       canvas.drawLine(
         Offset(center.dx - measurementHalfSpan, measurementY),
         Offset(center.dx + measurementHalfSpan, measurementY),
-        accentPaint,
+        measurementGuidePaint,
+      );
+      canvas.drawLine(
+        Offset(center.dx, measurementY),
+        Offset(center.dx, baselineY),
+        connectorPaint,
+      );
+      canvas.drawRRect(
+        RRect.fromRectAndRadius(
+          Rect.fromCenter(
+            center: Offset(center.dx, measurementY),
+            width: 22,
+            height: 6,
+          ),
+          const Radius.circular(3),
+        ),
+        measurementHandlePaint,
       );
 
       canvas.drawLine(
         Offset(center.dx - 32, center.dy - 14),
         Offset(center.dx + 10, center.dy - 14),
-        accentPaint,
+        measurementGuidePaint,
       );
       canvas.drawLine(
         Offset(center.dx - 32, center.dy + 14),
         Offset(center.dx + 10, center.dy + 14),
-        accentPaint,
+        measurementGuidePaint,
       );
 
       _paintText(
@@ -467,10 +584,21 @@ class ReticleMeasurementPainter extends CustomPainter {
     required Paint accentPaint,
   }) {
     final deltaFraction = (measurementFraction - baselineFraction).abs();
+    final normalizedOpacity = overlayOpacity.clamp(0.35, 1.0);
+    final connectorThickness = (lineThickness * 4.8).clamp(3.0, 12.0);
     final dashedPaint = Paint()
       ..color = AppColors.primary.withValues(alpha: 0.95)
       ..style = PaintingStyle.stroke
       ..strokeWidth = 2;
+    final measurementGuidePaint = Paint()
+      ..color = AppColors.accent
+      ..style = PaintingStyle.stroke
+      ..strokeWidth = 2.2;
+    final connectorPaint = Paint()
+      ..color = AppColors.accent.withValues(alpha: normalizedOpacity)
+      ..style = PaintingStyle.stroke
+      ..strokeWidth = connectorThickness
+      ..strokeCap = StrokeCap.square;
     final zeroFillPaint = Paint()
       ..color = AppColors.primary.withValues(alpha: 0.14)
       ..style = PaintingStyle.fill;
@@ -479,6 +607,12 @@ class ReticleMeasurementPainter extends CustomPainter {
       ..style = PaintingStyle.stroke
       ..strokeWidth = 1;
     final hasMeasurement = deltaFraction > 0.001 && readingLabel.isNotEmpty;
+    final zeroHandlePaint = Paint()
+      ..color = AppColors.primary.withValues(alpha: 0.96)
+      ..style = PaintingStyle.fill;
+    final measurementHandlePaint = Paint()
+      ..color = AppColors.accent
+      ..style = PaintingStyle.fill;
 
     final baselineHalfSpan = _verticalHalfSpanForCircle(
       center: center,
@@ -510,6 +644,17 @@ class ReticleMeasurementPainter extends CustomPainter {
     );
     canvas.drawRRect(zeroRect, zeroFillPaint);
     canvas.drawRRect(zeroRect, zeroBorderPaint);
+    canvas.drawRRect(
+      RRect.fromRectAndRadius(
+        Rect.fromCenter(
+          center: Offset(baselineX, center.dy),
+          width: 6,
+          height: 22,
+        ),
+        const Radius.circular(2),
+      ),
+      zeroHandlePaint,
+    );
     _paintText(
       canvas,
       text: '0',
@@ -525,18 +670,34 @@ class ReticleMeasurementPainter extends CustomPainter {
       canvas.drawLine(
         Offset(measurementX, center.dy - measurementHalfSpan),
         Offset(measurementX, center.dy + measurementHalfSpan),
-        accentPaint,
+        measurementGuidePaint,
+      );
+      canvas.drawLine(
+        Offset(baselineX, center.dy),
+        Offset(measurementX, center.dy),
+        connectorPaint,
+      );
+      canvas.drawRRect(
+        RRect.fromRectAndRadius(
+          Rect.fromCenter(
+            center: Offset(measurementX, center.dy),
+            width: 6,
+            height: 22,
+          ),
+          const Radius.circular(3),
+        ),
+        measurementHandlePaint,
       );
 
       canvas.drawLine(
         Offset(center.dx - 14, center.dy - 32),
         Offset(center.dx - 14, center.dy + 10),
-        accentPaint,
+        measurementGuidePaint,
       );
       canvas.drawLine(
         Offset(center.dx + 14, center.dy - 32),
         Offset(center.dx + 14, center.dy + 10),
-        accentPaint,
+        measurementGuidePaint,
       );
 
       _paintText(
@@ -634,7 +795,7 @@ class ReticleMeasurementPainter extends CustomPainter {
     final branchPaint = Paint()
       ..color = tickPaint.color
       ..style = PaintingStyle.stroke
-      ..strokeWidth = 1;
+      ..strokeWidth = tickPaint.strokeWidth;
 
     for (var row = 1; row <= 5; row++) {
       final y = center.dy + (row * 20.0);
@@ -884,6 +1045,8 @@ class ReticleMeasurementPainter extends CustomPainter {
         oldDelegate.measurementFraction != measurementFraction ||
         oldDelegate.reticleProfile != reticleProfile ||
         oldDelegate.reticleType != reticleType ||
-        oldDelegate.readingLabel != readingLabel;
+        oldDelegate.readingLabel != readingLabel ||
+        oldDelegate.lineThickness != lineThickness ||
+        oldDelegate.overlayOpacity != overlayOpacity;
   }
 }
