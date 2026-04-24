@@ -71,23 +71,23 @@ class ReticleProfilePicker extends StatelessWidget {
                   ),
                 ],
               ),
-              const SizedBox(height: AppSpacing.sm),
-              _GuideLine(
-                leading: '↕ Height hashes',
-                value: '${selectedProfile.heightGuide} ${reticleType.label}',
-                isActive: referenceDimension == TargetDimensionType.height,
-              ),
-              const SizedBox(height: AppSpacing.xs),
-              _GuideLine(
-                leading: '↔ Width hashes',
-                value: '${selectedProfile.widthGuide} ${reticleType.label}',
-                isActive: referenceDimension == TargetDimensionType.width,
-              ),
-              const SizedBox(height: AppSpacing.sm),
-              Text(
-                'Reference dimension: ${referenceDimension.label}',
-                style: theme.textTheme.bodySmall,
-              ),
+              // const SizedBox(height: AppSpacing.sm),
+              // _GuideLine(
+              //   leading: '↕ Height hashes',
+              //   value: '${selectedProfile.heightGuide} ${reticleType.label}',
+              //   isActive: referenceDimension == TargetDimensionType.height,
+              // ),
+              // const SizedBox(height: AppSpacing.xs),
+              // _GuideLine(
+              //   leading: '↔ Width hashes',
+              //   value: '${selectedProfile.widthGuide} ${reticleType.label}',
+              //   isActive: referenceDimension == TargetDimensionType.width,
+              // ),
+              // const SizedBox(height: AppSpacing.sm),
+              // Text(
+              //   'Reference dimension: ${referenceDimension.label}',
+              //   style: theme.textTheme.bodySmall,
+              // ),
             ],
           ),
         ),
@@ -162,56 +162,6 @@ class ReticleProfilePicker extends StatelessWidget {
     if (selected != null) {
       onSelected(selected);
     }
-  }
-}
-
-class _GuideLine extends StatelessWidget {
-  const _GuideLine({
-    required this.leading,
-    required this.value,
-    required this.isActive,
-  });
-
-  final String leading;
-  final String value;
-  final bool isActive;
-
-  @override
-  Widget build(BuildContext context) {
-    final theme = Theme.of(context);
-
-    return Container(
-      width: double.infinity,
-      padding: const EdgeInsets.symmetric(
-        horizontal: AppSpacing.sm,
-        vertical: AppSpacing.sm,
-      ),
-      decoration: BoxDecoration(
-        borderRadius: BorderRadius.circular(12),
-        color: isActive
-            ? theme.colorScheme.primary.withValues(alpha: 0.1)
-            : theme.colorScheme.primary.withValues(alpha: 0.05),
-        border: Border.all(
-          color: isActive
-              ? theme.colorScheme.primary.withValues(alpha: 0.3)
-              : theme.colorScheme.primary.withValues(alpha: 0.12),
-        ),
-      ),
-      child: RichText(
-        text: TextSpan(
-          style: theme.textTheme.bodySmall,
-          children: [
-            TextSpan(
-              text: '$leading: ',
-              style: theme.textTheme.bodySmall?.copyWith(
-                fontWeight: FontWeight.w700,
-              ),
-            ),
-            TextSpan(text: value),
-          ],
-        ),
-      ),
-    );
   }
 }
 

@@ -47,6 +47,7 @@ class CalculatorController extends GetxController {
   final isMeasurementModeEnabled = false.obs;
   final reticleLineThickness = 1.2.obs;
   final reticleOverlayOpacity = 1.0.obs;
+  final reticleZoom = 1.0.obs;
   final reticleHandleFraction = 0.12.obs;
   final verticalBaselineFraction =
       ReticleMeasurementService.zeroLineFraction.obs;
@@ -219,6 +220,46 @@ class CalculatorController extends GetxController {
 
   void setReticleOverlayOpacity(double value) {
     reticleOverlayOpacity.value = value.clamp(0.35, 1.0);
+  }
+
+  void adjustReticleOverlayOpacity(double delta) {
+    setReticleOverlayOpacity(reticleOverlayOpacity.value + delta);
+  }
+
+  void setReticleZoom(double value) {
+    reticleZoom.value = value.clamp(0.85, 1.45);
+  }
+
+  void adjustReticleZoom(double delta) {
+    setReticleZoom(reticleZoom.value + delta);
+  }
+
+  void resetReticleMeasurement() {
+    verticalBaselineFraction.value = ReticleMeasurementService.zeroLineFraction;
+    horizontalBaselineFraction.value = 0.5;
+
+    const defaultReading = 1.0;
+    final initialHandle = _reticleMeasurementService.handleFractionFromReading(
+      defaultReading,
+    );
+    reticleHandleFraction.value = initialHandle;
+    verticalMeasurementFraction.value =
+        (verticalBaselineFraction.value + initialHandle).clamp(
+          ReticleMeasurementService.minPositionFraction,
+          ReticleMeasurementService.maxPositionFraction,
+        );
+    horizontalMeasurementFraction.value =
+        (horizontalBaselineFraction.value + initialHandle).clamp(
+          ReticleMeasurementService.minPositionFraction,
+          ReticleMeasurementService.maxPositionFraction,
+        );
+    reticleReadingController.value = TextEditingValue(
+      text: AppFormatters.number(defaultReading),
+      selection: TextSelection.collapsed(
+        offset: AppFormatters.number(defaultReading).length,
+      ),
+    );
+    _handleCalculationInputChange();
   }
 
   void setReticleProfile(ReticleProfile profile) {

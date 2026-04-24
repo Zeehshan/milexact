@@ -261,37 +261,6 @@ class CalculatorScreen extends GetView<CalculatorController> {
                       onSelected: controller.setReticleProfile,
                     ),
                     const SizedBox(height: AppSpacing.md),
-                    Row(
-                      children: [
-                        Expanded(
-                          child: Column(
-                            crossAxisAlignment: CrossAxisAlignment.start,
-                            children: [
-                              Text(
-                                'Measurement Mode',
-                                style: theme.textTheme.titleMedium,
-                              ),
-                              const SizedBox(height: 2),
-                              SizedBox(
-                                height: 35,
-                                child: Text(
-                                  controller.isMeasurementModeEnabled.value
-                                      ? 'Reticle dragging is active and page scrolling is locked.'
-                                      : 'Enable this to drag guides inside the reticle.',
-                                  style: theme.textTheme.bodySmall,
-                                  maxLines: 2,
-                                ),
-                              ),
-                            ],
-                          ),
-                        ),
-                        Switch.adaptive(
-                          value: controller.isMeasurementModeEnabled.value,
-                          onChanged: controller.setMeasurementModeEnabled,
-                        ),
-                      ],
-                    ),
-                    const SizedBox(height: AppSpacing.sm),
                     ReticleMeasurementPanel(
                       referenceDimension: controller.referenceDimension.value,
                       baselineFraction: controller.activeBaselineFraction,
@@ -301,6 +270,7 @@ class CalculatorScreen extends GetView<CalculatorController> {
                       readingLabel: controller.reticleReadingInput.value,
                       lineThickness: controller.reticleLineThickness.value,
                       overlayOpacity: controller.reticleOverlayOpacity.value,
+                      zoomFactor: controller.reticleZoom.value,
                       interactionEnabled:
                           controller.isMeasurementModeEnabled.value,
                       onInteractionActiveChanged:
@@ -325,24 +295,16 @@ class CalculatorScreen extends GetView<CalculatorController> {
                       },
                     ),
                     const SizedBox(height: AppSpacing.sm),
-                    _ReticleControlSlider(
-                      label: 'Connector Thickness',
-                      value: controller.reticleLineThickness.value,
-                      min: 0.8,
-                      max: 3.0,
-                      valueText:
-                          '${controller.reticleLineThickness.value.toStringAsFixed(1)}x',
-                      onChanged: controller.setReticleLineThickness,
-                    ),
-                    const SizedBox(height: AppSpacing.sm),
-                    _ReticleControlSlider(
-                      label: 'Connector Opacity',
-                      value: controller.reticleOverlayOpacity.value,
-                      min: 0.35,
-                      max: 1.0,
-                      valueText:
-                          '${(controller.reticleOverlayOpacity.value * 100).round()}%',
-                      onChanged: controller.setReticleOverlayOpacity,
+                    _ReticleOptionsPanel(
+                      isMeasuring: controller.isMeasurementModeEnabled.value,
+                      thickness: controller.reticleLineThickness.value,
+                      opacity: controller.reticleOverlayOpacity.value,
+                      onMeasurementModeChanged:
+                          controller.setMeasurementModeEnabled,
+                      onReset: controller.resetReticleMeasurement,
+                      onThicknessChanged: controller.setReticleLineThickness,
+                      onOpacityChanged: controller.setReticleOverlayOpacity,
+                      onZoomStep: controller.adjustReticleZoom,
                     ),
                     const SizedBox(height: AppSpacing.md),
                     Text(
@@ -456,43 +418,231 @@ class CalculatorScreen extends GetView<CalculatorController> {
   }
 }
 
-class _ReticleControlSlider extends StatelessWidget {
-  const _ReticleControlSlider({
+class _ReticleOptionsPanel extends StatelessWidget {
+  const _ReticleOptionsPanel({
+    required this.isMeasuring,
+    required this.thickness,
+    required this.opacity,
+    required this.onMeasurementModeChanged,
+    required this.onReset,
+    required this.onThicknessChanged,
+    required this.onOpacityChanged,
+    required this.onZoomStep,
+  });
+
+  final bool isMeasuring;
+  final double thickness;
+  final double opacity;
+  final ValueChanged<bool> onMeasurementModeChanged;
+  final VoidCallback onReset;
+  final ValueChanged<double> onThicknessChanged;
+  final ValueChanged<double> onOpacityChanged;
+  final ValueChanged<double> onZoomStep;
+
+  @override
+  Widget build(BuildContext context) {
+    final theme = Theme.of(context);
+    final colorScheme = theme.colorScheme;
+    final opacityPercent = (opacity.clamp(0.35, 1.0) * 100).round();
+
+    return Center(
+      child: Column(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          Row(
+            children: [
+              Expanded(
+                child: FilledButton.icon(
+                  onPressed: () => onMeasurementModeChanged(!isMeasuring),
+                  icon: const Icon(Icons.straighten_rounded),
+                  label: Text(
+                    isMeasuring ? 'Measuring' : 'Measure',
+                    overflow: TextOverflow.ellipsis,
+                  ),
+                  style: FilledButton.styleFrom(
+                    minimumSize: const Size(0, 50),
+                    padding: const EdgeInsets.symmetric(horizontal: 16),
+                    backgroundColor: isMeasuring
+                        ? const Color(0xFFF4B12B)
+                        : colorScheme.surfaceContainerHighest.withValues(
+                            alpha: 0.9,
+                          ),
+                    foregroundColor: isMeasuring
+                        ? const Color(0xFF111510)
+                        : colorScheme.onSurfaceVariant,
+                    iconColor: isMeasuring
+                        ? const Color(0xFF111510)
+                        : colorScheme.onSurfaceVariant,
+                    textStyle: theme.textTheme.titleSmall?.copyWith(
+                      fontWeight: FontWeight.w800,
+                      letterSpacing: 0.3,
+                    ),
+                    shape: RoundedRectangleBorder(
+                      borderRadius: BorderRadius.circular(18),
+                    ),
+                  ),
+                ),
+              ),
+              const SizedBox(width: AppSpacing.sm),
+              _ReticleRoundIconButton(
+                tooltip: 'Reset measurement',
+                icon: Icons.refresh_rounded,
+                onPressed: onReset,
+              ),
+              const SizedBox(width: AppSpacing.sm),
+              _ReticleRoundIconButton(
+                tooltip: 'Zoom out reticle',
+                icon: Icons.zoom_out_rounded,
+                onPressed: () => onZoomStep(-0.1),
+              ),
+              const SizedBox(width: AppSpacing.sm),
+              _ReticleRoundIconButton(
+                tooltip: 'Zoom in reticle',
+                icon: Icons.zoom_in_rounded,
+                onPressed: () => onZoomStep(0.1),
+              ),
+            ],
+          ),
+          const SizedBox(height: AppSpacing.sm),
+          Row(
+            children: [
+              Expanded(
+                child: _ReticleSliderPill(
+                  label: 'Thickness',
+                  valueText: '${thickness.toStringAsFixed(1)}x',
+                  value: thickness,
+                  min: 0.8,
+                  max: 3.0,
+                  onChanged: onThicknessChanged,
+                ),
+              ),
+              const SizedBox(width: AppSpacing.sm),
+              Expanded(
+                child: _ReticleSliderPill(
+                  label: 'Opacity',
+                  valueText: '$opacityPercent%',
+                  value: opacity,
+                  min: 0.35,
+                  max: 1,
+                  onChanged: onOpacityChanged,
+                ),
+              ),
+            ],
+          ),
+        ],
+      ),
+    );
+  }
+}
+
+class _ReticleSliderPill extends StatelessWidget {
+  const _ReticleSliderPill({
     required this.label,
+    required this.valueText,
     required this.value,
     required this.min,
     required this.max,
-    required this.valueText,
     required this.onChanged,
   });
 
   final String label;
+  final String valueText;
   final double value;
   final double min;
   final double max;
-  final String valueText;
   final ValueChanged<double> onChanged;
 
   @override
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
+    final colorScheme = theme.colorScheme;
 
-    return Column(
-      crossAxisAlignment: CrossAxisAlignment.start,
-      children: [
-        Row(
-          children: [
-            Expanded(child: Text(label, style: theme.textTheme.titleSmall)),
-            Text(valueText, style: theme.textTheme.labelMedium),
-          ],
+    return Container(
+      height: 74,
+      padding: const EdgeInsets.fromLTRB(14, 10, 10, 6),
+      decoration: BoxDecoration(
+        color: colorScheme.surfaceContainerHighest.withValues(alpha: 0.42),
+        borderRadius: BorderRadius.circular(18),
+      ),
+      child: Column(
+        mainAxisAlignment: MainAxisAlignment.center,
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Row(
+            children: [
+              Expanded(
+                child: Text(
+                  label,
+                  maxLines: 1,
+                  overflow: TextOverflow.ellipsis,
+                  style: theme.textTheme.labelLarge?.copyWith(
+                    color: colorScheme.onSurfaceVariant,
+                    fontWeight: FontWeight.w800,
+                    letterSpacing: 0.3,
+                  ),
+                ),
+              ),
+              Text(
+                valueText,
+                style: theme.textTheme.labelMedium?.copyWith(
+                  color: colorScheme.onSurfaceVariant,
+                  fontWeight: FontWeight.w800,
+                  fontFeatures: const [FontFeature.tabularFigures()],
+                ),
+              ),
+            ],
+          ),
+          const SizedBox(height: 2),
+          Expanded(
+            child: SliderTheme(
+              data: SliderTheme.of(context).copyWith(
+                trackHeight: 4,
+                thumbShape: const RoundSliderThumbShape(enabledThumbRadius: 12),
+                overlayShape: const RoundSliderOverlayShape(overlayRadius: 20),
+              ),
+              child: Slider(
+                padding: EdgeInsets.zero,
+                value: value.clamp(min, max),
+                min: min,
+                max: max,
+                onChanged: onChanged,
+              ),
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+}
+
+class _ReticleRoundIconButton extends StatelessWidget {
+  const _ReticleRoundIconButton({
+    required this.tooltip,
+    required this.icon,
+    required this.onPressed,
+  });
+
+  final String tooltip;
+  final IconData icon;
+  final VoidCallback onPressed;
+
+  @override
+  Widget build(BuildContext context) {
+    final colorScheme = Theme.of(context).colorScheme;
+
+    return IconButton.filledTonal(
+      tooltip: tooltip,
+      onPressed: onPressed,
+      icon: Icon(icon),
+      style: IconButton.styleFrom(
+        fixedSize: const Size.square(50),
+        padding: EdgeInsets.zero,
+        backgroundColor: colorScheme.surfaceContainerHighest.withValues(
+          alpha: 0.45,
         ),
-        Slider(
-          value: value.clamp(min, max),
-          min: min,
-          max: max,
-          onChanged: onChanged,
-        ),
-      ],
+        foregroundColor: colorScheme.onSurfaceVariant,
+        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(18)),
+      ),
     );
   }
 }

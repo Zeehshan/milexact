@@ -21,6 +21,7 @@ class ReticleMeasurementPanel extends StatefulWidget {
     required this.readingLabel,
     required this.lineThickness,
     required this.overlayOpacity,
+    required this.zoomFactor,
     required this.interactionEnabled,
     required this.onInteractionActiveChanged,
     required this.onInteractionStart,
@@ -38,6 +39,7 @@ class ReticleMeasurementPanel extends StatefulWidget {
   final String readingLabel;
   final double lineThickness;
   final double overlayOpacity;
+  final double zoomFactor;
   final bool interactionEnabled;
   final ValueChanged<bool> onInteractionActiveChanged;
   final void Function(Offset localPosition, Size size) onInteractionStart;
@@ -61,8 +63,6 @@ class _ReticleMeasurementPanelState extends State<ReticleMeasurementPanel>
   Tween<double>? _measurementTween;
   int? _activePointer;
   _GuideDragTarget? _activeDragTarget;
-  bool _isBaselineLocked = false;
-  double _lockedBaselineFraction = 0.0;
 
   @override
   void initState() {
@@ -91,19 +91,15 @@ class _ReticleMeasurementPanelState extends State<ReticleMeasurementPanel>
     if (oldWidget.interactionEnabled && !widget.interactionEnabled) {
       _activePointer = null;
       _activeDragTarget = null;
-      _isBaselineLocked = false;
       widget.onInteractionActiveChanged(false);
     }
 
     if (oldWidget.baselineFraction != widget.baselineFraction ||
         oldWidget.measurementFraction != widget.measurementFraction) {
-      // Don't update baseline animation if it's locked
-      if (!_isBaselineLocked) {
-        _baselineTween = Tween<double>(
-          begin: _displayBaselineFraction,
-          end: widget.baselineFraction,
-        );
-      }
+      _baselineTween = Tween<double>(
+        begin: _displayBaselineFraction,
+        end: widget.baselineFraction,
+      );
       _measurementTween = Tween<double>(
         begin: _displayMeasurementFraction,
         end: widget.measurementFraction,
@@ -127,14 +123,8 @@ class _ReticleMeasurementPanelState extends State<ReticleMeasurementPanel>
 
   void _handleAnimationTick() {
     setState(() {
-      // If baseline is locked, keep it at the locked value
-      if (_isBaselineLocked) {
-        _displayBaselineFraction = _lockedBaselineFraction;
-      } else {
-        _displayBaselineFraction =
-            _baselineTween?.evaluate(_motionAnimation) ??
-            widget.baselineFraction;
-      }
+      _displayBaselineFraction =
+          _baselineTween?.evaluate(_motionAnimation) ?? widget.baselineFraction;
       _displayMeasurementFraction =
           _measurementTween?.evaluate(_motionAnimation) ??
           widget.measurementFraction;
@@ -145,13 +135,22 @@ class _ReticleMeasurementPanelState extends State<ReticleMeasurementPanel>
   Widget build(BuildContext context) {
     return LayoutBuilder(
       builder: (context, constraints) {
-        final size = Size(constraints.maxWidth, 280);
+        final size = Size(constraints.maxWidth, 350);
 
         return SizedBox(
           height: size.height,
           width: double.infinity,
           child: Stack(
             children: [
+              Positioned(
+                top: 6,
+                right: 8,
+                child: _ReticleGuideLegend(
+                  referenceDimension: widget.referenceDimension,
+                  reticleProfile: widget.reticleProfile,
+                  reticleType: widget.reticleType,
+                ),
+              ),
               Listener(
                 behavior: HitTestBehavior.opaque,
                 onPointerDown: widget.interactionEnabled
@@ -177,48 +176,8 @@ class _ReticleMeasurementPanelState extends State<ReticleMeasurementPanel>
                     readingLabel: widget.readingLabel,
                     lineThickness: widget.lineThickness,
                     overlayOpacity: widget.overlayOpacity,
-                    isBaselineLocked: _isBaselineLocked,
-                  ),
-                ),
-              ),
-              // Lock/Unlock baseline button
-              Positioned(
-                right: 12,
-                bottom: 12,
-                child: GestureDetector(
-                  behavior: HitTestBehavior.opaque,
-                  onTap: () {
-                    setState(() {
-                      if (!_isBaselineLocked) {
-                        // When locking, save the current baseline position
-                        _lockedBaselineFraction = _displayBaselineFraction;
-                      }
-                      _isBaselineLocked = !_isBaselineLocked;
-                    });
-                  },
-                  child: Container(
-                    padding: const EdgeInsets.all(8),
-                    decoration: BoxDecoration(
-                      color: _isBaselineLocked
-                          ? AppColors.accent.withValues(alpha: 0.2)
-                          : AppColors.primary.withValues(alpha: 0.12),
-                      borderRadius: BorderRadius.circular(8),
-                      border: Border.all(
-                        color: _isBaselineLocked
-                            ? AppColors.accent.withValues(alpha: 0.6)
-                            : AppColors.primary.withValues(alpha: 0.4),
-                        width: 1.5,
-                      ),
-                    ),
-                    child: Icon(
-                      _isBaselineLocked
-                          ? Icons.lock_rounded
-                          : Icons.lock_open_rounded,
-                      size: 20,
-                      color: _isBaselineLocked
-                          ? AppColors.accent
-                          : AppColors.primary.withValues(alpha: 0.7),
-                    ),
+                    zoomFactor: widget.zoomFactor,
+                    measurementModeEnabled: widget.interactionEnabled,
                   ),
                 ),
               ),
@@ -232,15 +191,11 @@ class _ReticleMeasurementPanelState extends State<ReticleMeasurementPanel>
   void _handlePointerDown(PointerDownEvent event, Size size) {
     _activePointer = event.pointer;
     widget.onInteractionActiveChanged(true);
-    final localPosition = _clampInteractionToScope(event.localPosition, size);
+    final localPosition = _clampInteractionToScope(
+      _logicalCanvasPosition(event.localPosition, size),
+      size,
+    );
     final dragTarget = _resolveDragTarget(localPosition, size);
-
-    // If baseline is locked, ignore baseline drag target and use measurement instead
-    if (_isBaselineLocked && dragTarget == _GuideDragTarget.baseline) {
-      _activeDragTarget = _GuideDragTarget.measurement;
-      widget.onInteractionUpdate(localPosition, size);
-      return;
-    }
 
     _activeDragTarget = dragTarget;
 
@@ -263,30 +218,20 @@ class _ReticleMeasurementPanelState extends State<ReticleMeasurementPanel>
       return;
     }
 
-    final localPosition = _clampInteractionToScope(event.localPosition, size);
+    final localPosition = _clampInteractionToScope(
+      _logicalCanvasPosition(event.localPosition, size),
+      size,
+    );
     switch (_activeDragTarget) {
       case _GuideDragTarget.baseline:
-        // Don't update baseline if it's locked
-        if (!_isBaselineLocked) {
-          widget.onBaselineUpdate(localPosition, size);
-        }
+        widget.onBaselineUpdate(localPosition, size);
         break;
       case _GuideDragTarget.measurement:
-        if (!_isBaselineLocked) {
-          widget.onBaselineUpdate(localPosition, size);
-          break;
-        } else {
-          widget.onInteractionUpdate(localPosition, size);
-          break;
-        }
+        widget.onInteractionUpdate(localPosition, size);
+        break;
       default:
-        if (!_isBaselineLocked) {
-          widget.onBaselineUpdate(localPosition, size);
-          break;
-        } else {
-          widget.onInteractionUpdate(localPosition, size);
-          break;
-        }
+        widget.onInteractionUpdate(localPosition, size);
+        break;
     }
   }
 
@@ -311,9 +256,14 @@ class _ReticleMeasurementPanelState extends State<ReticleMeasurementPanel>
   }
 
   _GuideDragTarget? _resolveDragTarget(Offset localPosition, Size size) {
-    final baselinePosition = _axisPositionPx(widget.baselineFraction, size);
+    final center = Offset(size.width / 2, size.height / 2);
+    final scopeRadius =
+        size.shortestSide *
+        _reticleInnerRadiusFactor *
+        _reticleOuterRadiusMultiplier;
+    final baselinePosition = _axisPositionPx(_displayBaselineFraction, size);
     final measurementPosition = _axisPositionPx(
-      widget.measurementFraction,
+      _displayMeasurementFraction,
       size,
     );
     final touchPosition =
@@ -321,12 +271,34 @@ class _ReticleMeasurementPanelState extends State<ReticleMeasurementPanel>
         ? localPosition.dy
         : localPosition.dx;
     final hasMeasurement =
-        (widget.measurementFraction - widget.baselineFraction).abs() > 0.001 &&
+        (_displayMeasurementFraction - _displayBaselineFraction).abs() >
+            0.001 &&
         widget.readingLabel.trim().isNotEmpty;
 
     if (hasMeasurement &&
         (touchPosition - measurementPosition).abs() <= _guideGrabThreshold) {
       return _GuideDragTarget.measurement;
+    }
+
+    final startIcon = _baselineActionIconPosition(
+      size: size,
+      center: center,
+      scopeRadius: scopeRadius,
+      useTargetSide: false,
+    );
+    final targetIcon = _baselineActionIconPosition(
+      size: size,
+      center: center,
+      scopeRadius: scopeRadius,
+      useTargetSide: true,
+    );
+
+    if ((localPosition - targetIcon).distance <= 28) {
+      return _GuideDragTarget.measurement;
+    }
+
+    if ((localPosition - startIcon).distance <= 28) {
+      return _GuideDragTarget.baseline;
     }
 
     if ((touchPosition - baselinePosition).abs() <= _guideGrabThreshold) {
@@ -340,6 +312,72 @@ class _ReticleMeasurementPanelState extends State<ReticleMeasurementPanel>
     return widget.referenceDimension == TargetDimensionType.height
         ? size.height * fraction
         : size.width * fraction;
+  }
+
+  Offset _logicalCanvasPosition(Offset localPosition, Size size) {
+    final zoomFactor = widget.zoomFactor.clamp(0.85, 1.45);
+    if ((zoomFactor - 1).abs() < 0.001) {
+      return localPosition;
+    }
+
+    final center = Offset(size.width / 2, size.height / 2);
+    final delta = localPosition - center;
+    return center + (delta / zoomFactor);
+  }
+
+  Offset _baselineActionIconPosition({
+    required Size size,
+    required Offset center,
+    required double scopeRadius,
+    required bool useTargetSide,
+  }) {
+    if (widget.referenceDimension == TargetDimensionType.height) {
+      final baselineY = size.height * _displayBaselineFraction;
+      final span = _horizontalHalfSpanForCircle(
+        center: center,
+        radius: scopeRadius,
+        y: baselineY,
+      );
+      return Offset(
+        useTargetSide ? center.dx + span - 28 : center.dx - span + 28,
+        baselineY,
+      );
+    }
+
+    final baselineX = size.width * _displayBaselineFraction;
+    final span = _verticalHalfSpanForCircle(
+      center: center,
+      radius: scopeRadius,
+      x: baselineX,
+    );
+    return Offset(
+      baselineX,
+      useTargetSide ? center.dy + span - 28 : center.dy - span + 28,
+    );
+  }
+
+  double _horizontalHalfSpanForCircle({
+    required Offset center,
+    required double radius,
+    required double y,
+  }) {
+    final dy = (y - center.dy).abs();
+    if (dy >= radius) {
+      return 0;
+    }
+    return math.sqrt((radius * radius) - (dy * dy));
+  }
+
+  double _verticalHalfSpanForCircle({
+    required Offset center,
+    required double radius,
+    required double x,
+  }) {
+    final dx = (x - center.dx).abs();
+    if (dx >= radius) {
+      return 0;
+    }
+    return math.sqrt((radius * radius) - (dx * dx));
   }
 
   Offset _clampInteractionToScope(Offset localPosition, Size size) {
@@ -366,6 +404,61 @@ class _ReticleMeasurementPanelState extends State<ReticleMeasurementPanel>
   }
 }
 
+class _ReticleGuideLegend extends StatelessWidget {
+  const _ReticleGuideLegend({
+    required this.referenceDimension,
+    required this.reticleProfile,
+    required this.reticleType,
+  });
+
+  final TargetDimensionType referenceDimension;
+  final ReticleProfile reticleProfile;
+  final ReticleType reticleType;
+
+  @override
+  Widget build(BuildContext context) {
+    final heightActive = referenceDimension == TargetDimensionType.height;
+    final widthActive = referenceDimension == TargetDimensionType.width;
+
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      mainAxisSize: MainAxisSize.min,
+      children: [
+        _LegendLine(
+          text: '↕ • ${reticleProfile.heightGuide} ${reticleType.label}',
+          active: heightActive,
+        ),
+        const SizedBox(height: 3),
+        _LegendLine(
+          text: '↔ • ${reticleProfile.widthGuide} ${reticleType.label}',
+          active: widthActive,
+        ),
+      ],
+    );
+  }
+}
+
+class _LegendLine extends StatelessWidget {
+  const _LegendLine({required this.text, required this.active});
+
+  final String text;
+  final bool active;
+
+  @override
+  Widget build(BuildContext context) {
+    return Text(
+      text,
+      maxLines: 1,
+      overflow: TextOverflow.ellipsis,
+      style: TextStyle(
+        color: active ? AppColors.accent : AppColors.textMuted,
+        fontSize: 11,
+        fontWeight: active ? FontWeight.w700 : FontWeight.w600,
+      ),
+    );
+  }
+}
+
 class ReticleMeasurementPainter extends CustomPainter {
   const ReticleMeasurementPainter({
     required this.referenceDimension,
@@ -376,7 +469,8 @@ class ReticleMeasurementPainter extends CustomPainter {
     required this.readingLabel,
     required this.lineThickness,
     required this.overlayOpacity,
-    this.isBaselineLocked = false,
+    required this.zoomFactor,
+    this.measurementModeEnabled = false,
   });
 
   final TargetDimensionType referenceDimension;
@@ -387,7 +481,8 @@ class ReticleMeasurementPainter extends CustomPainter {
   final String readingLabel;
   final double lineThickness;
   final double overlayOpacity;
-  final bool isBaselineLocked;
+  final double zoomFactor;
+  final bool measurementModeEnabled;
 
   @override
   void paint(Canvas canvas, Size size) {
@@ -422,6 +517,13 @@ class ReticleMeasurementPainter extends CustomPainter {
     );
     canvas.drawRRect(rect, borderPaint);
 
+    canvas.save();
+    canvas.clipRRect(rect);
+    canvas.translate(center.dx, center.dy);
+    final normalizedZoom = zoomFactor.clamp(0.85, 1.45);
+    canvas.scale(normalizedZoom, normalizedZoom);
+    canvas.translate(-center.dx, -center.dy);
+
     canvas.drawCircle(center, scopeRadius, ringPaint);
     canvas.drawCircle(center, radius, ringPaint);
 
@@ -438,20 +540,27 @@ class ReticleMeasurementPainter extends CustomPainter {
 
     switch (reticleProfile) {
       case ReticleProfile.milDot:
-        _drawStandardTicks(canvas, center, tickPaint);
-        _drawMilDots(canvas, center, reticlePaint);
+        _drawMilDots(canvas, center, radius, reticlePaint);
       case ReticleProfile.christmasTree:
         _drawStandardTicks(canvas, center, tickPaint);
         _drawChristmasTree(canvas, size, center, tickPaint);
       case ReticleProfile.duplex:
         _drawDuplex(canvas, size, center, reticlePaint);
       case ReticleProfile.simpleCrosshair:
-        _drawStandardTicks(canvas, center, tickPaint);
+        _drawSimpleCrosshair(canvas, center, radius, tickPaint, reticlePaint);
     }
 
-    _drawAxisLabels(canvas, size, center, radius);
+    if (reticleProfile == ReticleProfile.simpleCrosshair) {
+      _drawSimpleCrosshairLabels(canvas, center, radius);
+    } else if (reticleProfile != ReticleProfile.duplex) {
+      _drawAxisLabels(canvas, size, center, radius);
+    }
 
-    if (referenceDimension == TargetDimensionType.height) {
+    final showMeasurementOverlay =
+        measurementModeEnabled || readingLabel.trim().isNotEmpty;
+
+    if (showMeasurementOverlay &&
+        referenceDimension == TargetDimensionType.height) {
       final baselineY = size.height * baselineFraction;
       final measurementY = size.height * measurementFraction;
       _drawHeightMeasurementOverlay(
@@ -463,7 +572,7 @@ class ReticleMeasurementPainter extends CustomPainter {
         measurementY: measurementY,
         accentPaint: accentPaint,
       );
-    } else {
+    } else if (showMeasurementOverlay) {
       final baselineX = size.width * baselineFraction;
       final measurementX = size.width * measurementFraction;
       _drawWidthMeasurementOverlay(
@@ -477,8 +586,8 @@ class ReticleMeasurementPainter extends CustomPainter {
       );
     }
 
-    _drawLegend(canvas, size, center, scopeRadius);
     _drawFooter(canvas, size);
+    canvas.restore();
   }
 
   void _drawHeightMeasurementOverlay({
@@ -491,32 +600,30 @@ class ReticleMeasurementPainter extends CustomPainter {
     required Paint accentPaint,
   }) {
     final deltaFraction = (measurementFraction - baselineFraction).abs();
+    final normalizedThickness = lineThickness.clamp(0.8, 3.0);
     final normalizedOpacity = overlayOpacity.clamp(0.35, 1.0);
+    final guideAlpha = (0.4 + (normalizedOpacity * 0.6)).clamp(0.0, 1.0);
+    final guideThickness = (normalizedThickness * 1.2).clamp(1.2, 3.8);
     final connectorThickness = (lineThickness * 4.8).clamp(3.0, 12.0);
+    final handleWidth = (16 + (normalizedThickness * 4)).clamp(20.0, 30.0);
+    final handleHeight = (5 + (normalizedThickness * 1.6)).clamp(7.0, 12.0);
+    final glowWidth = handleWidth + 4;
+    final glowHeight = handleHeight + 4;
+    final targetLabelColor = AppColors.accent.withValues(alpha: guideAlpha);
     final dashedPaint = Paint()
-      ..color = AppColors.primary.withValues(alpha: 0.95)
+      ..color = AppColors.primary.withValues(alpha: guideAlpha)
       ..style = PaintingStyle.stroke
-      ..strokeWidth = 2;
+      ..strokeWidth = guideThickness;
     final measurementGuidePaint = Paint()
-      ..color = AppColors.accent
+      ..color = AppColors.accent.withValues(alpha: guideAlpha)
       ..style = PaintingStyle.stroke
-      ..strokeWidth = 2.2;
+      ..strokeWidth = guideThickness;
     final connectorPaint = Paint()
       ..color = AppColors.accent.withValues(alpha: normalizedOpacity)
       ..style = PaintingStyle.stroke
       ..strokeWidth = connectorThickness
       ..strokeCap = StrokeCap.square;
-    final zeroFillPaint = Paint()
-      ..color = AppColors.primary.withValues(alpha: 0.14)
-      ..style = PaintingStyle.fill;
-    final zeroBorderPaint = Paint()
-      ..color = AppColors.primary.withValues(alpha: 0.95)
-      ..style = PaintingStyle.stroke
-      ..strokeWidth = 1;
     final hasMeasurement = deltaFraction > 0.001 && readingLabel.isNotEmpty;
-    final zeroHandlePaint = Paint()
-      ..color = AppColors.primary.withValues(alpha: 0.96)
-      ..style = PaintingStyle.fill;
     final measurementHandlePaint = Paint()
       ..color = AppColors.accent
       ..style = PaintingStyle.fill;
@@ -541,49 +648,33 @@ class ReticleMeasurementPainter extends CustomPainter {
       gapLength: 6,
     );
 
-    final zeroRect = RRect.fromRectAndRadius(
-      Rect.fromCenter(
-        center: Offset(center.dx - baselineHalfSpan + 9, baselineY - 2),
-        width: 8,
-        height: 16,
-      ),
-      const Radius.circular(2),
+    _drawBaselineActionIcon(
+      canvas,
+      center: Offset(center.dx - baselineHalfSpan + 28, baselineY),
+      icon: Icons.touch_app_rounded,
+      color: AppColors.primary,
+      tooltipBackground: AppColors.background,
     );
-    canvas.drawRRect(zeroRect, zeroFillPaint);
-    canvas.drawRRect(zeroRect, zeroBorderPaint);
+    _drawBaselineActionIcon(
+      canvas,
+      center: Offset(center.dx + baselineHalfSpan - 28, baselineY),
+      icon: Icons.my_location_rounded,
+      color: AppColors.accent,
+      tooltipBackground: AppColors.background,
+    );
 
-    // Enhanced baseline handle with glow effect and arrows
     final baselineHandleGlowPaint = Paint()
-      ..color = isBaselineLocked
-          ? AppColors.accent.withValues(alpha: 0.2)
-          : AppColors.primary.withValues(alpha: 0.12)
+      ..color = AppColors.primary.withValues(
+        alpha: 0.06 + (normalizedOpacity * 0.14),
+      )
       ..style = PaintingStyle.fill;
-
-    // Add lock border when locked
-    if (isBaselineLocked) {
-      canvas.drawRRect(
-        RRect.fromRectAndRadius(
-          Rect.fromCenter(
-            center: Offset(center.dx, baselineY),
-            width: 30,
-            height: 12,
-          ),
-          const Radius.circular(4),
-        ),
-        Paint()
-          ..color = Colors.transparent
-          ..style = PaintingStyle.stroke
-          ..strokeWidth = 2
-          ..color = AppColors.accent.withValues(alpha: 0.6),
-      );
-    }
 
     canvas.drawRRect(
       RRect.fromRectAndRadius(
         Rect.fromCenter(
           center: Offset(center.dx, baselineY),
-          width: 28,
-          height: 10,
+          width: glowWidth,
+          height: glowHeight,
         ),
         const Radius.circular(3),
       ),
@@ -591,55 +682,38 @@ class ReticleMeasurementPainter extends CustomPainter {
     );
 
     final handlePaint = Paint()
-      ..color = isBaselineLocked
-          ? AppColors.accent.withValues(alpha: 0.8)
-          : AppColors.primary.withValues(alpha: 0.96)
+      ..color = AppColors.primary.withValues(alpha: guideAlpha)
       ..style = PaintingStyle.fill;
 
     canvas.drawRRect(
       RRect.fromRectAndRadius(
         Rect.fromCenter(
           center: Offset(center.dx, baselineY),
-          width: 24,
-          height: 8,
+          width: handleWidth,
+          height: handleHeight,
         ),
         const Radius.circular(2),
       ),
       handlePaint,
     );
 
-    // Draw lock icon if baseline is locked
-    if (isBaselineLocked) {
-      _drawTextIcon(
-        canvas,
-        icon: Icons.lock_rounded,
-        center: Offset(center.dx - 2, baselineY),
-        size: 8,
-        color: AppColors.accent,
-      );
-    }
-
-    // Draw arrow indicators on baseline handle
     final arrowPaint = Paint()
-      ..color = isBaselineLocked
-          ? Colors.transparent
-          : AppColors.primary.withValues(alpha: 0.6)
-      ..strokeWidth = 1.2
+      ..color = AppColors.primary.withValues(
+        alpha: 0.35 + (normalizedOpacity * 0.45),
+      )
+      ..strokeWidth = (normalizedThickness * 0.9).clamp(1.0, 2.2)
       ..style = PaintingStyle.stroke;
 
-    // Left arrow (hidden when locked)
-    if (!isBaselineLocked) {
-      canvas.drawLine(
-        Offset(center.dx - 6, baselineY - 1),
-        Offset(center.dx - 10, baselineY),
-        arrowPaint,
-      );
-      canvas.drawLine(
-        Offset(center.dx - 6, baselineY + 1),
-        Offset(center.dx - 10, baselineY),
-        arrowPaint,
-      );
-    }
+    canvas.drawLine(
+      Offset(center.dx - 6, baselineY - 1),
+      Offset(center.dx - 10, baselineY),
+      arrowPaint,
+    );
+    canvas.drawLine(
+      Offset(center.dx - 6, baselineY + 1),
+      Offset(center.dx - 10, baselineY),
+      arrowPaint,
+    );
 
     // Right arrow
     canvas.drawLine(
@@ -653,30 +727,19 @@ class ReticleMeasurementPainter extends CustomPainter {
       arrowPaint,
     );
 
-    _paintText(
-      canvas,
-      text: '0',
-      offset: Offset(zeroRect.left + 2.1, zeroRect.top + 2.2),
-      style: const TextStyle(
-        color: AppColors.primary,
-        fontSize: 9,
-        fontWeight: FontWeight.w800,
-      ),
-    );
-
     // Label for baseline
-    _paintText(
-      canvas,
-      text: 'START',
-      offset: Offset(center.dx - 15, baselineY - 12),
-      style: const TextStyle(
-        color: AppColors.primary,
-        fontSize: 8,
-        fontWeight: FontWeight.w600,
-      ),
-    );
+    // _paintText(
+    //   canvas,
+    //   text: 'START',
+    //   offset: Offset(center.dx - 15, baselineY - 12),
+    //   style: TextStyle(
+    //     color: labelColor,
+    //     fontSize: 8,
+    //     fontWeight: FontWeight.w600,
+    //   ),
+    // );
 
-    if (hasMeasurement && isBaselineLocked) {
+    if (hasMeasurement) {
       canvas.drawLine(
         Offset(center.dx - measurementHalfSpan, measurementY),
         Offset(center.dx + measurementHalfSpan, measurementY),
@@ -690,14 +753,16 @@ class ReticleMeasurementPainter extends CustomPainter {
 
       // Enhanced measurement handle with glow effect
       final measurementHandleGlowPaint = Paint()
-        ..color = AppColors.accent.withValues(alpha: 0.16)
+        ..color = AppColors.accent.withValues(
+          alpha: 0.08 + (normalizedOpacity * 0.12),
+        )
         ..style = PaintingStyle.fill;
       canvas.drawRRect(
         RRect.fromRectAndRadius(
           Rect.fromCenter(
             center: Offset(center.dx, measurementY),
-            width: 28,
-            height: 10,
+            width: glowWidth,
+            height: glowHeight,
           ),
           const Radius.circular(4),
         ),
@@ -708,8 +773,8 @@ class ReticleMeasurementPainter extends CustomPainter {
         RRect.fromRectAndRadius(
           Rect.fromCenter(
             center: Offset(center.dx, measurementY),
-            width: 24,
-            height: 8,
+            width: handleWidth,
+            height: handleHeight,
           ),
           const Radius.circular(3),
         ),
@@ -718,8 +783,10 @@ class ReticleMeasurementPainter extends CustomPainter {
 
       // Draw arrow indicators on measurement handle
       final targetArrowPaint = Paint()
-        ..color = AppColors.accent.withValues(alpha: 0.7)
-        ..strokeWidth = 1.3
+        ..color = AppColors.accent.withValues(
+          alpha: 0.4 + (normalizedOpacity * 0.4),
+        )
+        ..strokeWidth = (normalizedThickness * 0.95).clamp(1.0, 2.3)
         ..style = PaintingStyle.stroke;
 
       // Up/Down arrows to indicate dragging
@@ -768,23 +835,23 @@ class ReticleMeasurementPainter extends CustomPainter {
       );
 
       // Label for measurement target
-      _paintText(
-        canvas,
-        text: 'TARGET',
-        offset: Offset(center.dx - 18, measurementY - 12),
-        style: const TextStyle(
-          color: AppColors.accent,
-          fontSize: 8,
-          fontWeight: FontWeight.w600,
-        ),
-      );
+      // _paintText(
+      //   canvas,
+      //   text: 'TARGET',
+      //   offset: Offset(center.dx - 18, measurementY - 12),
+      //   style: TextStyle(
+      //     color: targetLabelColor,
+      //     fontSize: 8,
+      //     fontWeight: FontWeight.w600,
+      //   ),
+      // );
 
       _paintText(
         canvas,
         text: '$readingLabel ${reticleType.label}',
         offset: Offset(center.dx + 38, center.dy - 8),
-        style: const TextStyle(
-          color: AppColors.accent,
+        style: TextStyle(
+          color: targetLabelColor,
           fontSize: 10,
           fontWeight: FontWeight.w700,
         ),
@@ -835,32 +902,30 @@ class ReticleMeasurementPainter extends CustomPainter {
     required Paint accentPaint,
   }) {
     final deltaFraction = (measurementFraction - baselineFraction).abs();
+    final normalizedThickness = lineThickness.clamp(0.8, 3.0);
     final normalizedOpacity = overlayOpacity.clamp(0.35, 1.0);
+    final guideAlpha = (0.4 + (normalizedOpacity * 0.6)).clamp(0.0, 1.0);
+    final guideThickness = (normalizedThickness * 1.2).clamp(1.2, 3.8);
     final connectorThickness = (lineThickness * 4.8).clamp(3.0, 12.0);
+    final handleWidth = (5 + (normalizedThickness * 1.6)).clamp(7.0, 12.0);
+    final handleHeight = (16 + (normalizedThickness * 4)).clamp(20.0, 30.0);
+    final glowWidth = handleWidth + 4;
+    final glowHeight = handleHeight + 4;
+    final targetLabelColor = AppColors.accent.withValues(alpha: guideAlpha);
     final dashedPaint = Paint()
-      ..color = AppColors.primary.withValues(alpha: 0.95)
+      ..color = AppColors.primary.withValues(alpha: guideAlpha)
       ..style = PaintingStyle.stroke
-      ..strokeWidth = 2;
+      ..strokeWidth = guideThickness;
     final measurementGuidePaint = Paint()
-      ..color = AppColors.accent
+      ..color = AppColors.accent.withValues(alpha: guideAlpha)
       ..style = PaintingStyle.stroke
-      ..strokeWidth = 2.2;
+      ..strokeWidth = guideThickness;
     final connectorPaint = Paint()
       ..color = AppColors.accent.withValues(alpha: normalizedOpacity)
       ..style = PaintingStyle.stroke
       ..strokeWidth = connectorThickness
       ..strokeCap = StrokeCap.square;
-    final zeroFillPaint = Paint()
-      ..color = AppColors.primary.withValues(alpha: 0.14)
-      ..style = PaintingStyle.fill;
-    final zeroBorderPaint = Paint()
-      ..color = AppColors.primary.withValues(alpha: 0.95)
-      ..style = PaintingStyle.stroke
-      ..strokeWidth = 1;
     final hasMeasurement = deltaFraction > 0.001 && readingLabel.isNotEmpty;
-    final zeroHandlePaint = Paint()
-      ..color = AppColors.primary.withValues(alpha: 0.96)
-      ..style = PaintingStyle.fill;
     final measurementHandlePaint = Paint()
       ..color = AppColors.accent
       ..style = PaintingStyle.fill;
@@ -885,49 +950,33 @@ class ReticleMeasurementPainter extends CustomPainter {
       gapLength: 6,
     );
 
-    final zeroRect = RRect.fromRectAndRadius(
-      Rect.fromCenter(
-        center: Offset(baselineX, center.dy - baselineHalfSpan + 8),
-        width: 16,
-        height: 8,
-      ),
-      const Radius.circular(2),
+    _drawBaselineActionIcon(
+      canvas,
+      center: Offset(baselineX, center.dy - baselineHalfSpan + 28),
+      icon: Icons.touch_app_rounded,
+      color: AppColors.primary,
+      tooltipBackground: AppColors.background,
     );
-    canvas.drawRRect(zeroRect, zeroFillPaint);
-    canvas.drawRRect(zeroRect, zeroBorderPaint);
+    _drawBaselineActionIcon(
+      canvas,
+      center: Offset(baselineX, center.dy + baselineHalfSpan - 28),
+      icon: Icons.my_location_rounded,
+      color: AppColors.accent,
+      tooltipBackground: AppColors.background,
+    );
 
-    // Enhanced baseline handle with glow effect and arrows
     final baselineHandleGlowPaint = Paint()
-      ..color = isBaselineLocked
-          ? AppColors.accent.withValues(alpha: 0.2)
-          : AppColors.primary.withValues(alpha: 0.12)
+      ..color = AppColors.primary.withValues(
+        alpha: 0.06 + (normalizedOpacity * 0.14),
+      )
       ..style = PaintingStyle.fill;
-
-    // Add lock border when locked
-    if (isBaselineLocked) {
-      canvas.drawRRect(
-        RRect.fromRectAndRadius(
-          Rect.fromCenter(
-            center: Offset(baselineX, center.dy),
-            width: 12,
-            height: 30,
-          ),
-          const Radius.circular(4),
-        ),
-        Paint()
-          ..color = Colors.transparent
-          ..style = PaintingStyle.stroke
-          ..strokeWidth = 2
-          ..color = AppColors.accent.withValues(alpha: 0.6),
-      );
-    }
 
     canvas.drawRRect(
       RRect.fromRectAndRadius(
         Rect.fromCenter(
           center: Offset(baselineX, center.dy),
-          width: 10,
-          height: 28,
+          width: glowWidth,
+          height: glowHeight,
         ),
         const Radius.circular(3),
       ),
@@ -935,94 +984,62 @@ class ReticleMeasurementPainter extends CustomPainter {
     );
 
     final handlePaint = Paint()
-      ..color = isBaselineLocked
-          ? AppColors.accent.withValues(alpha: 0.8)
-          : AppColors.primary.withValues(alpha: 0.96)
+      ..color = AppColors.primary.withValues(alpha: guideAlpha)
       ..style = PaintingStyle.fill;
 
     canvas.drawRRect(
       RRect.fromRectAndRadius(
         Rect.fromCenter(
           center: Offset(baselineX, center.dy),
-          width: 8,
-          height: 24,
+          width: handleWidth,
+          height: handleHeight,
         ),
         const Radius.circular(2),
       ),
       handlePaint,
     );
 
-    // Draw lock icon if baseline is locked
-    if (isBaselineLocked) {
-      _drawTextIcon(
-        canvas,
-        icon: Icons.lock_rounded,
-        center: Offset(baselineX, center.dy - 2),
-        size: 8,
-        color: AppColors.accent,
-      );
-    }
-
-    // Draw arrow indicators on baseline handle
     final arrowPaint = Paint()
-      ..color = isBaselineLocked
-          ? Colors.transparent
-          : AppColors.primary.withValues(alpha: 0.6)
-      ..strokeWidth = 1.2
+      ..color = AppColors.primary.withValues(
+        alpha: 0.35 + (normalizedOpacity * 0.45),
+      )
+      ..strokeWidth = (normalizedThickness * 0.9).clamp(1.0, 2.2)
       ..style = PaintingStyle.stroke;
 
-    // Up arrow (hidden when locked)
-    if (!isBaselineLocked) {
-      canvas.drawLine(
-        Offset(baselineX - 1, center.dy - 6),
-        Offset(baselineX, center.dy - 10),
-        arrowPaint,
-      );
-      canvas.drawLine(
-        Offset(baselineX + 1, center.dy - 6),
-        Offset(baselineX, center.dy - 10),
-        arrowPaint,
-      );
-    }
-
-    // Down arrow (hidden when locked)
-    if (!isBaselineLocked) {
-      canvas.drawLine(
-        Offset(baselineX - 1, center.dy + 6),
-        Offset(baselineX, center.dy + 10),
-        arrowPaint,
-      );
-      canvas.drawLine(
-        Offset(baselineX + 1, center.dy + 6),
-        Offset(baselineX, center.dy + 10),
-        arrowPaint,
-      );
-    }
-
-    _paintText(
-      canvas,
-      text: '0',
-      offset: Offset(zeroRect.left + 5.2, zeroRect.top - 0.3),
-      style: const TextStyle(
-        color: AppColors.primary,
-        fontSize: 9,
-        fontWeight: FontWeight.w800,
-      ),
+    canvas.drawLine(
+      Offset(baselineX - 1, center.dy - 6),
+      Offset(baselineX, center.dy - 10),
+      arrowPaint,
+    );
+    canvas.drawLine(
+      Offset(baselineX + 1, center.dy - 6),
+      Offset(baselineX, center.dy - 10),
+      arrowPaint,
+    );
+    canvas.drawLine(
+      Offset(baselineX - 1, center.dy + 6),
+      Offset(baselineX, center.dy + 10),
+      arrowPaint,
+    );
+    canvas.drawLine(
+      Offset(baselineX + 1, center.dy + 6),
+      Offset(baselineX, center.dy + 10),
+      arrowPaint,
     );
 
     // Label for baseline
-    _paintText(
-      canvas,
-      text: 'START',
-      offset: Offset(baselineX - 14, center.dy - 18),
-      style: const TextStyle(
-        color: AppColors.primary,
-        fontSize: 8,
-        fontWeight: FontWeight.w600,
-      ),
-    );
+    // _paintText(
+    //   canvas,
+    //   text: 'START',
+    //   offset: Offset(baselineX - 14, center.dy - 18),
+    //   style: TextStyle(
+    //     color: labelColor,
+    //     fontSize: 8,
+    //     fontWeight: FontWeight.w600,
+    //   ),
+    // );
 
-    if (hasMeasurement && isBaselineLocked) {
+    if (hasMeasurement) {
       canvas.drawLine(
         Offset(measurementX, center.dy - measurementHalfSpan),
         Offset(measurementX, center.dy + measurementHalfSpan),
@@ -1036,14 +1053,16 @@ class ReticleMeasurementPainter extends CustomPainter {
 
       // Enhanced measurement handle with glow effect
       final measurementHandleGlowPaint = Paint()
-        ..color = AppColors.accent.withValues(alpha: 0.16)
+        ..color = AppColors.accent.withValues(
+          alpha: 0.08 + (normalizedOpacity * 0.12),
+        )
         ..style = PaintingStyle.fill;
       canvas.drawRRect(
         RRect.fromRectAndRadius(
           Rect.fromCenter(
             center: Offset(measurementX, center.dy),
-            width: 10,
-            height: 28,
+            width: glowWidth,
+            height: glowHeight,
           ),
           const Radius.circular(4),
         ),
@@ -1054,8 +1073,8 @@ class ReticleMeasurementPainter extends CustomPainter {
         RRect.fromRectAndRadius(
           Rect.fromCenter(
             center: Offset(measurementX, center.dy),
-            width: 8,
-            height: 24,
+            width: handleWidth,
+            height: handleHeight,
           ),
           const Radius.circular(3),
         ),
@@ -1064,8 +1083,10 @@ class ReticleMeasurementPainter extends CustomPainter {
 
       // Draw arrow indicators on measurement handle
       final targetArrowPaint = Paint()
-        ..color = AppColors.accent.withValues(alpha: 0.7)
-        ..strokeWidth = 1.3
+        ..color = AppColors.accent.withValues(
+          alpha: 0.4 + (normalizedOpacity * 0.4),
+        )
+        ..strokeWidth = (normalizedThickness * 0.95).clamp(1.0, 2.3)
         ..style = PaintingStyle.stroke;
 
       // Left/Right arrows to indicate dragging
@@ -1114,23 +1135,23 @@ class ReticleMeasurementPainter extends CustomPainter {
       );
 
       // Label for measurement target
-      _paintText(
-        canvas,
-        text: 'TARGET',
-        offset: Offset(measurementX - 16, center.dy - 18),
-        style: const TextStyle(
-          color: AppColors.accent,
-          fontSize: 8,
-          fontWeight: FontWeight.w600,
-        ),
-      );
+      // _paintText(
+      //   canvas,
+      //   text: 'TARGET',
+      //   offset: Offset(measurementX - 16, center.dy - 18),
+      //   style: TextStyle(
+      //     color: targetLabelColor,
+      //     fontSize: 8,
+      //     fontWeight: FontWeight.w600,
+      //   ),
+      // );
 
       _paintText(
         canvas,
         text: '$readingLabel ${reticleType.label}',
         offset: Offset(center.dx - 8, center.dy - 4),
-        style: const TextStyle(
-          color: AppColors.accent,
+        style: TextStyle(
+          color: targetLabelColor,
           fontSize: 10,
           fontWeight: FontWeight.w700,
         ),
@@ -1178,37 +1199,143 @@ class ReticleMeasurementPainter extends CustomPainter {
   }
 
   void _drawStandardTicks(Canvas canvas, Offset center, Paint tickPaint) {
-    for (var i = -4; i <= 4; i++) {
-      if (i == 0) {
+    for (var step = -10; step <= 10; step++) {
+      if (step == 0) {
         continue;
       }
 
-      final tickOffset = i * 20.0;
+      final tickOffset = step * 10.0;
+      final isMajor = step.isEven;
+      final halfLength = isMajor ? 8.0 : 4.0;
+      final paint = Paint()
+        ..color = tickPaint.color
+        ..strokeWidth = isMajor ? 1.2 : 0.85
+        ..style = PaintingStyle.stroke;
+
       canvas.drawLine(
-        Offset(center.dx - 6, center.dy + tickOffset),
-        Offset(center.dx + 6, center.dy + tickOffset),
-        tickPaint,
+        Offset(center.dx - halfLength, center.dy + tickOffset),
+        Offset(center.dx + halfLength, center.dy + tickOffset),
+        paint,
       );
       canvas.drawLine(
-        Offset(center.dx + tickOffset, center.dy - 6),
-        Offset(center.dx + tickOffset, center.dy + 6),
-        tickPaint,
+        Offset(center.dx + tickOffset, center.dy - halfLength),
+        Offset(center.dx + tickOffset, center.dy + halfLength),
+        paint,
       );
     }
   }
 
-  void _drawMilDots(Canvas canvas, Offset center, Paint reticlePaint) {
+  void _drawMilDots(
+    Canvas canvas,
+    Offset center,
+    double radius,
+    Paint reticlePaint,
+  ) {
     final dotPaint = Paint()
+      ..color = reticlePaint.color
+      ..style = PaintingStyle.fill;
+    final step = radius / 5;
+
+    canvas.drawCircle(center, 3.2, dotPaint);
+
+    for (var i = 1; i <= 5; i++) {
+      final offset = i * step;
+      final dotRadius = i == 5 ? 3.1 : 2.9;
+      canvas.drawCircle(
+        Offset(center.dx + offset, center.dy),
+        dotRadius,
+        dotPaint,
+      );
+      canvas.drawCircle(
+        Offset(center.dx - offset, center.dy),
+        dotRadius,
+        dotPaint,
+      );
+      canvas.drawCircle(
+        Offset(center.dx, center.dy + offset),
+        dotRadius,
+        dotPaint,
+      );
+      canvas.drawCircle(
+        Offset(center.dx, center.dy - offset),
+        dotRadius,
+        dotPaint,
+      );
+    }
+  }
+
+  void _drawSimpleCrosshair(
+    Canvas canvas,
+    Offset center,
+    double radius,
+    Paint tickPaint,
+    Paint reticlePaint,
+  ) {
+    final majorStep = radius / 5;
+    final minorStep = majorStep / 2;
+    final majorPaint = Paint()
+      ..color = tickPaint.color.withValues(alpha: 0.72)
+      ..style = PaintingStyle.stroke
+      ..strokeWidth = 1.05;
+    final minorPaint = Paint()
+      ..color = tickPaint.color.withValues(alpha: 0.52)
+      ..style = PaintingStyle.stroke
+      ..strokeWidth = 0.8;
+    final centerDotPaint = Paint()
       ..color = reticlePaint.color
       ..style = PaintingStyle.fill;
 
     for (var i = 1; i <= 5; i++) {
-      final offset = i * 18.5;
-      canvas.drawCircle(Offset(center.dx + offset, center.dy), 2.6, dotPaint);
-      canvas.drawCircle(Offset(center.dx - offset, center.dy), 2.6, dotPaint);
-      canvas.drawCircle(Offset(center.dx, center.dy + offset), 2.6, dotPaint);
-      canvas.drawCircle(Offset(center.dx, center.dy - offset), 2.6, dotPaint);
+      final offset = majorStep * i;
+      final majorHalfLength = i == 5 ? 7.0 : 8.0;
+      canvas.drawLine(
+        Offset(center.dx - majorHalfLength, center.dy - offset),
+        Offset(center.dx + majorHalfLength, center.dy - offset),
+        majorPaint,
+      );
+      canvas.drawLine(
+        Offset(center.dx - majorHalfLength, center.dy + offset),
+        Offset(center.dx + majorHalfLength, center.dy + offset),
+        majorPaint,
+      );
+      canvas.drawLine(
+        Offset(center.dx - offset, center.dy - majorHalfLength),
+        Offset(center.dx - offset, center.dy + majorHalfLength),
+        majorPaint,
+      );
+      canvas.drawLine(
+        Offset(center.dx + offset, center.dy - majorHalfLength),
+        Offset(center.dx + offset, center.dy + majorHalfLength),
+        majorPaint,
+      );
+
+      if (i < 5) {
+        final minorOffset = offset + minorStep;
+        const minorHalfLength = 4.0;
+        canvas.drawLine(
+          Offset(center.dx - minorHalfLength, center.dy - minorOffset),
+          Offset(center.dx + minorHalfLength, center.dy - minorOffset),
+          minorPaint,
+        );
+        canvas.drawLine(
+          Offset(center.dx - minorHalfLength, center.dy + minorOffset),
+          Offset(center.dx + minorHalfLength, center.dy + minorOffset),
+          minorPaint,
+        );
+        canvas.drawLine(
+          Offset(center.dx - minorOffset, center.dy - minorHalfLength),
+          Offset(center.dx - minorOffset, center.dy + minorHalfLength),
+          minorPaint,
+        );
+        canvas.drawLine(
+          Offset(center.dx + minorOffset, center.dy - minorHalfLength),
+          Offset(center.dx + minorOffset, center.dy + minorHalfLength),
+          minorPaint,
+        );
+      }
     }
+
+    canvas.drawCircle(center, 3.4, centerDotPaint);
   }
 
   void _drawChristmasTree(
@@ -1217,25 +1344,98 @@ class ReticleMeasurementPainter extends CustomPainter {
     Offset center,
     Paint tickPaint,
   ) {
+    final radius = size.shortestSide * _reticleInnerRadiusFactor;
+    final scopeRadius = radius * _reticleOuterRadiusMultiplier;
+    const milStep = 20.0;
     final branchPaint = Paint()
       ..color = tickPaint.color
       ..style = PaintingStyle.stroke
-      ..strokeWidth = tickPaint.strokeWidth;
+      ..strokeWidth = 1.15;
+    final branchMinorPaint = Paint()
+      ..color = tickPaint.color.withValues(alpha: 0.7)
+      ..style = PaintingStyle.stroke
+      ..strokeWidth = 0.85;
+    final windDotPaint = Paint()
+      ..color = AppColors.primary.withValues(alpha: 0.65)
+      ..style = PaintingStyle.fill;
+    final treeLabelStyle = const TextStyle(
+      color: AppColors.textMuted,
+      fontSize: 11,
+      fontWeight: FontWeight.w600,
+    );
 
-    for (var row = 1; row <= 5; row++) {
-      final y = center.dy + (row * 20.0);
-      if (y > size.height - 16) {
+    for (final rowValue in [2, 4, 6, 8]) {
+      final y = center.dy + (rowValue * milStep);
+      if (y > size.height - 18) {
         continue;
       }
 
-      final halfWidth = row * 18.0;
+      final maxHalfSpan = _horizontalHalfSpanForCircle(
+        center: center,
+        radius: scopeRadius,
+        y: y,
+      );
+      final halfWidth = math.min(rowValue * milStep, maxHalfSpan - 12);
+      if (halfWidth <= 0) {
+        continue;
+      }
+
       canvas.drawLine(
         Offset(center.dx - halfWidth, y),
         Offset(center.dx + halfWidth, y),
         branchPaint,
       );
-      canvas.drawCircle(Offset(center.dx - halfWidth, y), 1.8, branchPaint);
-      canvas.drawCircle(Offset(center.dx + halfWidth, y), 1.8, branchPaint);
+
+      final fullSteps = rowValue;
+      for (var i = 1; i < fullSteps; i++) {
+        final x = center.dx - halfWidth + (i * milStep);
+        canvas.drawLine(
+          Offset(x, y - 5),
+          Offset(x, y + 5),
+          i.isEven ? branchPaint : branchMinorPaint,
+        );
+      }
+
+      canvas.drawLine(
+        Offset(center.dx - halfWidth, y - 8),
+        Offset(center.dx - halfWidth, y + 8),
+        branchPaint,
+      );
+      canvas.drawLine(
+        Offset(center.dx + halfWidth, y - 8),
+        Offset(center.dx + halfWidth, y + 8),
+        branchPaint,
+      );
+
+      _paintText(
+        canvas,
+        text: '$rowValue',
+        offset: Offset(center.dx - halfWidth - 10, y - 7),
+        style: treeLabelStyle,
+      );
+      _paintText(
+        canvas,
+        text: '$rowValue',
+        offset: Offset(center.dx + halfWidth + 5, y - 7),
+        style: treeLabelStyle,
+      );
+    }
+
+    for (final rowValue in [1, 3, 5, 7]) {
+      final y = center.dy + (rowValue * milStep);
+      final maxHalfSpan = _horizontalHalfSpanForCircle(
+        center: center,
+        radius: scopeRadius,
+        y: y,
+      );
+      if (maxHalfSpan <= 10) {
+        continue;
+      }
+
+      final leftDot = Offset(center.dx - maxHalfSpan + 8, y);
+      final rightDot = Offset(center.dx + maxHalfSpan - 8, y);
+      canvas.drawCircle(leftDot, 2.4, windDotPaint);
+      canvas.drawCircle(rightDot, 2.4, windDotPaint);
     }
   }
 
@@ -1289,94 +1489,112 @@ class ReticleMeasurementPainter extends CustomPainter {
     );
   }
 
+  void _drawSimpleCrosshairLabels(Canvas canvas, Offset center, double radius) {
+    final labelStyle = const TextStyle(
+      color: AppColors.textMuted,
+      fontSize: 11,
+      fontWeight: FontWeight.w600,
+    );
+    final step = radius / 5;
+
+    for (var i = 1; i <= 5; i++) {
+      final offset = step * i;
+      _paintText(
+        canvas,
+        text: '$i',
+        offset: Offset(center.dx + 10, center.dy - offset - 7),
+        style: labelStyle,
+      );
+      _paintText(
+        canvas,
+        text: '$i',
+        offset: Offset(center.dx + 10, center.dy + offset - 7),
+        style: labelStyle,
+      );
+      _paintText(
+        canvas,
+        text: '$i',
+        offset: Offset(center.dx + offset - 4, center.dy - 21),
+        style: labelStyle,
+      );
+      _paintText(
+        canvas,
+        text: '$i',
+        offset: Offset(center.dx - offset - 4, center.dy - 21),
+        style: labelStyle,
+      );
+    }
+  }
+
   void _drawDuplex(
     Canvas canvas,
     Size size,
     Offset center,
     Paint reticlePaint,
   ) {
-    final scopeRadius =
-        size.shortestSide *
-        _reticleInnerRadiusFactor *
-        _reticleOuterRadiusMultiplier;
+    final radius = size.shortestSide * _reticleInnerRadiusFactor;
+    final scopeRadius = radius * _reticleOuterRadiusMultiplier;
+    final innerGap = radius * 0.5;
+    final outerInset = 8.0;
+    final postLengthEnd = scopeRadius - outerInset;
+    final thinPaint = Paint()
+      ..color = reticlePaint.color.withValues(alpha: 0.9)
+      ..style = PaintingStyle.stroke
+      ..strokeWidth = 1.2
+      ..strokeCap = StrokeCap.square;
     final thickPaint = Paint()
       ..color = reticlePaint.color
       ..style = PaintingStyle.stroke
-      ..strokeWidth = 4
-      ..strokeCap = StrokeCap.round;
+      ..strokeWidth = 8
+      ..strokeCap = StrokeCap.square;
+    final centerDotPaint = Paint()
+      ..color = reticlePaint.color
+      ..style = PaintingStyle.fill;
 
     canvas.drawLine(
       Offset(center.dx - scopeRadius, center.dy),
-      Offset(center.dx - 44, center.dy),
-      thickPaint,
-    );
-    canvas.drawLine(
-      Offset(center.dx + 44, center.dy),
       Offset(center.dx + scopeRadius, center.dy),
-      thickPaint,
+      thinPaint,
     );
     canvas.drawLine(
       Offset(center.dx, center.dy - scopeRadius),
-      Offset(center.dx, center.dy - 44),
+      Offset(center.dx, center.dy + scopeRadius),
+      thinPaint,
+    );
+
+    canvas.drawLine(
+      Offset(center.dx - postLengthEnd, center.dy),
+      Offset(center.dx - innerGap, center.dy),
       thickPaint,
     );
     canvas.drawLine(
-      Offset(center.dx, center.dy + 44),
-      Offset(center.dx, center.dy + scopeRadius),
+      Offset(center.dx + innerGap, center.dy),
+      Offset(center.dx + postLengthEnd, center.dy),
       thickPaint,
     );
-  }
-
-  void _drawLegend(
-    Canvas canvas,
-    Size size,
-    Offset center,
-    double scopeRadius,
-  ) {
-    final activeStyle = const TextStyle(
-      color: AppColors.accent,
-      fontSize: 11,
-      fontWeight: FontWeight.w700,
+    canvas.drawLine(
+      Offset(center.dx, center.dy - postLengthEnd),
+      Offset(center.dx, center.dy - innerGap),
+      thickPaint,
     );
-    final inactiveStyle = const TextStyle(
-      color: AppColors.textMuted,
-      fontSize: 11,
-      fontWeight: FontWeight.w600,
-    );
-    final topLine = '↕ • ${reticleProfile.heightGuide} ${reticleType.label}';
-    final bottomLine = '↔ • ${reticleProfile.widthGuide} ${reticleType.label}';
-    final topPainter = _textPainter(
-      topLine,
-      referenceDimension == TargetDimensionType.height
-          ? activeStyle
-          : inactiveStyle,
-    );
-    final bottomPainter = _textPainter(
-      bottomLine,
-      referenceDimension == TargetDimensionType.width
-          ? activeStyle
-          : inactiveStyle,
-    );
-    const rightPadding = 8.0;
-    const topInset = 10.0;
-    const lineGap = 4.0;
-    final circleTop = center.dy - scopeRadius;
-    final circleRight = center.dx + scopeRadius;
-    final topY = (circleTop + topInset).clamp(
-      18.0,
-      size.height - topPainter.height - bottomPainter.height - lineGap - 18,
-    );
-    final bottomY = topY + topPainter.height + lineGap;
-    final blockWidth = topPainter.width > bottomPainter.width
-        ? topPainter.width
-        : bottomPainter.width;
-    final blockLeft = (circleRight - rightPadding - blockWidth).clamp(
-      center.dx - scopeRadius + 18,
-      size.width - blockWidth - 18,
+    canvas.drawLine(
+      Offset(center.dx, center.dy + innerGap),
+      Offset(center.dx, center.dy + postLengthEnd),
+      thickPaint,
     );
 
-    topPainter.paint(canvas, Offset(blockLeft, topY));
-    bottomPainter.paint(canvas, Offset(blockLeft, bottomY));
+    canvas.drawCircle(center, 3.2, centerDotPaint);
+
+    _paintText(
+      canvas,
+      text: 'gap ≈ 2.5 ${reticleType.label}',
+      offset: Offset(center.dx + innerGap + 10, center.dy - 16),
+      style: const TextStyle(
+        color: AppColors.textMuted,
+        fontSize: 11,
+        fontWeight: FontWeight.w600,
+      ),
+    );
   }
 
   void _drawFooter(Canvas canvas, Size size) {
@@ -1436,6 +1654,33 @@ class ReticleMeasurementPainter extends CustomPainter {
       center.dy - iconPainter.height / 2,
     );
     iconPainter.paint(canvas, offset);
+  }
+
+  void _drawBaselineActionIcon(
+    Canvas canvas, {
+    required Offset center,
+    required IconData icon,
+    required Color color,
+    required Color tooltipBackground,
+  }) {
+    final rect = RRect.fromRectAndRadius(
+      Rect.fromCenter(center: center, width: 22, height: 22),
+      const Radius.circular(6),
+    );
+    canvas.drawRRect(
+      rect,
+      Paint()
+        ..color = tooltipBackground.withValues(alpha: 0.82)
+        ..style = PaintingStyle.fill,
+    );
+    canvas.drawRRect(
+      rect,
+      Paint()
+        ..color = color.withValues(alpha: 0.58)
+        ..style = PaintingStyle.stroke
+        ..strokeWidth = 1,
+    );
+    _drawTextIcon(canvas, icon: icon, center: center, size: 12, color: color);
   }
 
   void _drawDashedLine({
@@ -1498,6 +1743,8 @@ class ReticleMeasurementPainter extends CustomPainter {
         oldDelegate.reticleType != reticleType ||
         oldDelegate.readingLabel != readingLabel ||
         oldDelegate.lineThickness != lineThickness ||
-        oldDelegate.overlayOpacity != overlayOpacity;
+        oldDelegate.overlayOpacity != overlayOpacity ||
+        oldDelegate.zoomFactor != zoomFactor ||
+        oldDelegate.measurementModeEnabled != measurementModeEnabled;
   }
 }
