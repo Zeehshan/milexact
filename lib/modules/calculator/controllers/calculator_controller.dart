@@ -368,7 +368,11 @@ class CalculatorController extends GetxController {
       horizontalMeasurementFraction.value = measurementFraction;
     }
 
-    final handleFraction = (measurementFraction - activeBaselineFraction).abs();
+    final handleFraction = _reticleMeasurementService
+        .handleFractionFromPositionFractions(
+          baselineFraction: activeBaselineFraction,
+          measurementFraction: measurementFraction,
+        );
     if (handleFraction < _minimumInteractionFraction) {
       reticleHandleFraction.value = 0;
       reticleReadingController.value = const TextEditingValue(

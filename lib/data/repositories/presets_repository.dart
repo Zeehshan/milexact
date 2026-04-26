@@ -12,8 +12,8 @@ class PresetsRepository extends GetxService {
   final RxList<TargetPreset> presets = <TargetPreset>[].obs;
 
   Future<PresetsRepository> init() async {
-    await _mergeBuiltInCategories();
-    await _mergeBuiltInPresets();
+    await _syncBuiltInCategories();
+    await _syncBuiltInPresets();
 
     _reload();
     return this;
@@ -66,30 +66,82 @@ class PresetsRepository extends GetxService {
     _reload();
   }
 
-  Future<void> _mergeBuiltInCategories() async {
-    final existingIds = _storage.categoriesBox.keys
-        .map((key) => key.toString())
-        .toSet();
-    final missing = {
-      for (final category in SeedData.defaultCategories())
-        if (!existingIds.contains(category.id)) category.id: category.toJson(),
+  Future<void> _syncBuiltInCategories() async {
+    final existingById = {
+      for (final entry in _storage.categoriesBox.toMap().entries)
+        entry.key.toString(): TargetCategory.fromJson(
+          Map<String, dynamic>.from(entry.value),
+        ),
     };
-    if (missing.isNotEmpty) {
-      await _storage.categoriesBox.putAll(missing);
+
+    final writes = <String, Map<String, dynamic>>{};
+    for (final category in SeedData.defaultCategories()) {
+      final existing = existingById[category.id];
+      if (existing == null) {
+        writes[category.id] = category.toJson();
+        continue;
+      }
+      if (existing.name == category.name) {
+        continue;
+      }
+      writes[category.id] = category
+          .copyWith(createdAt: existing.createdAt, updatedAt: DateTime.now())
+          .toJson();
+    }
+
+    if (writes.isNotEmpty) {
+      await _storage.categoriesBox.putAll(writes);
     }
   }
 
-  Future<void> _mergeBuiltInPresets() async {
-    final existingIds = _storage.presetsBox.keys
-        .map((key) => key.toString())
-        .toSet();
-    final missing = {
-      for (final preset in SeedData.defaultPresets())
-        if (!existingIds.contains(preset.id)) preset.id: preset.toJson(),
+  Future<void> _syncBuiltInPresets() async {
+    final existingById = {
+      for (final entry in _storage.presetsBox.toMap().entries)
+        entry.key.toString(): TargetPreset.fromJson(
+          Map<String, dynamic>.from(entry.value),
+        ),
     };
-    if (missing.isNotEmpty) {
-      await _storage.presetsBox.putAll(missing);
+    final seedPresets = SeedData.defaultPresets();
+    final seedIds = seedPresets.map((preset) => preset.id).toSet();
+    final writes = <String, Map<String, dynamic>>{};
+
+    for (final preset in seedPresets) {
+      final existing = existingById[preset.id];
+      if (existing == null) {
+        writes[preset.id] = preset.toJson();
+        continue;
+      }
+      if (_matchesSeed(existing, preset)) {
+        continue;
+      }
+      writes[preset.id] = preset
+          .copyWith(createdAt: existing.createdAt, updatedAt: DateTime.now())
+          .toJson();
     }
+
+    final obsoleteBuiltInIds = existingById.entries
+        .where((entry) => !entry.value.isCustom && !seedIds.contains(entry.key))
+        .map((entry) => entry.key)
+        .toList(growable: false);
+
+    if (obsoleteBuiltInIds.isNotEmpty) {
+      await _storage.presetsBox.deleteAll(obsoleteBuiltInIds);
+    }
+    if (writes.isNotEmpty) {
+      await _storage.presetsBox.putAll(writes);
+    }
+  }
+
+  bool _matchesSeed(TargetPreset existing, TargetPreset seed) {
+    return existing.categoryId == seed.categoryId &&
+        existing.name == seed.name &&
+        existing.heightValue == seed.heightValue &&
+        existing.heightUnit == seed.heightUnit &&
+        existing.widthValue == seed.widthValue &&
+        existing.widthUnit == seed.widthUnit &&
+        existing.supportsMetric == seed.supportsMetric &&
+        existing.supportsImperial == seed.supportsImperial &&
+        existing.isCustom == seed.isCustom;
   }
 
   void _reload() {

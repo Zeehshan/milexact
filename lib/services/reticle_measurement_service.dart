@@ -10,21 +10,23 @@ class ReticleMeasurementService extends GetxService {
   static const double minPositionFraction = 0.04;
   static const double maxPositionFraction = 0.96;
 
+  static const double reticleInnerRadiusFactor = 0.40;
+  static const double reticleMarksPerHalfAxis = 5.0;
+  static const double reticleMarkFraction =
+      reticleInnerRadiusFactor / reticleMarksPerHalfAxis;
+
   double clampReading(double reading) {
     return reading.clamp(minReading, maxReading);
   }
 
   double readingFromHandleFraction(double handleFraction) {
     final clamped = handleFraction.clamp(0.0, maxHandleFraction);
-    return clampReading((clamped / maxHandleFraction) * maxReading);
+    return clampReading(clamped / reticleMarkFraction);
   }
 
   double handleFractionFromReading(double reading) {
     final clamped = clampReading(reading);
-    return ((clamped / maxReading) * maxHandleFraction).clamp(
-      0.0,
-      maxHandleFraction,
-    );
+    return (clamped * reticleMarkFraction).clamp(0.0, maxHandleFraction);
   }
 
   double handleFractionFromLocalPosition({
@@ -62,7 +64,8 @@ class ReticleMeasurementService extends GetxService {
     required double measurementFraction,
   }) {
     final delta = (measurementFraction - baselineFraction).abs();
-    return readingFromHandleFraction(delta);
+    final reading = delta / reticleMarkFraction;
+    return clampReading(reading);
   }
 
   double measurementFractionFromBaselineAndReading({
@@ -70,7 +73,8 @@ class ReticleMeasurementService extends GetxService {
     required double reading,
     bool preferPositiveDirection = true,
   }) {
-    final delta = handleFractionFromReading(reading);
+    final clampedReading = clampReading(reading);
+    final delta = clampedReading * reticleMarkFraction;
     final forward = (baselineFraction + delta).clamp(
       minPositionFraction,
       maxPositionFraction,
@@ -91,6 +95,14 @@ class ReticleMeasurementService extends GetxService {
       return backward;
     }
     return forward;
+  }
+
+  double handleFractionFromPositionFractions({
+    required double baselineFraction,
+    required double measurementFraction,
+  }) {
+    final delta = (measurementFraction - baselineFraction).abs();
+    return delta.clamp(0.0, maxHandleFraction);
   }
 
   double _handleFractionFromCenteredPosition({
