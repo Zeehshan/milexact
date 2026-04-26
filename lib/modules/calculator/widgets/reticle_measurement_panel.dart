@@ -7,6 +7,8 @@ import 'package:milexact/data/models/enums.dart';
 const double _reticleInnerRadiusFactor = 0.40;
 const double _reticleOuterRadiusMultiplier = 1.15;
 const double _guideGrabThreshold = 18.0;
+const double _minReticleZoom = 0.55;
+const double _maxReticleZoom = 3.0;
 
 enum _GuideDragTarget { baseline, measurement }
 
@@ -315,7 +317,10 @@ class _ReticleMeasurementPanelState extends State<ReticleMeasurementPanel>
   }
 
   Offset _logicalCanvasPosition(Offset localPosition, Size size) {
-    final zoomFactor = widget.zoomFactor.clamp(0.85, 1.45);
+    final zoomFactor = widget.zoomFactor.clamp(
+      _minReticleZoom,
+      _maxReticleZoom,
+    );
     if ((zoomFactor - 1).abs() < 0.001) {
       return localPosition;
     }
@@ -520,7 +525,7 @@ class ReticleMeasurementPainter extends CustomPainter {
     canvas.save();
     canvas.clipRRect(rect);
     canvas.translate(center.dx, center.dy);
-    final normalizedZoom = zoomFactor.clamp(0.85, 1.45);
+    final normalizedZoom = zoomFactor.clamp(_minReticleZoom, _maxReticleZoom);
     canvas.scale(normalizedZoom, normalizedZoom);
     canvas.translate(-center.dx, -center.dy);
 

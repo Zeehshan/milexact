@@ -16,6 +16,8 @@ import 'package:milexact/shared/utils/id_generator.dart';
 
 class CalculatorController extends GetxController {
   static const double _minimumInteractionFraction = 0.006;
+  static const double _minReticleZoom = 0.55;
+  static const double _maxReticleZoom = 3.0;
 
   CalculatorController(
     this._presetsRepository,
@@ -227,7 +229,7 @@ class CalculatorController extends GetxController {
   }
 
   void setReticleZoom(double value) {
-    reticleZoom.value = value.clamp(0.85, 1.45);
+    reticleZoom.value = value.clamp(_minReticleZoom, _maxReticleZoom);
   }
 
   void adjustReticleZoom(double delta) {

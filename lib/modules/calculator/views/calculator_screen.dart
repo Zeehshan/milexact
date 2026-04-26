@@ -299,6 +299,7 @@ class CalculatorScreen extends GetView<CalculatorController> {
                       isMeasuring: controller.isMeasurementModeEnabled.value,
                       thickness: controller.reticleLineThickness.value,
                       opacity: controller.reticleOverlayOpacity.value,
+                      zoomFactor: controller.reticleZoom.value,
                       onMeasurementModeChanged:
                           controller.setMeasurementModeEnabled,
                       onReset: controller.resetReticleMeasurement,
@@ -423,6 +424,7 @@ class _ReticleOptionsPanel extends StatelessWidget {
     required this.isMeasuring,
     required this.thickness,
     required this.opacity,
+    required this.zoomFactor,
     required this.onMeasurementModeChanged,
     required this.onReset,
     required this.onThicknessChanged,
@@ -433,6 +435,7 @@ class _ReticleOptionsPanel extends StatelessWidget {
   final bool isMeasuring;
   final double thickness;
   final double opacity;
+  final double zoomFactor;
   final ValueChanged<bool> onMeasurementModeChanged;
   final VoidCallback onReset;
   final ValueChanged<double> onThicknessChanged;
@@ -444,6 +447,7 @@ class _ReticleOptionsPanel extends StatelessWidget {
     final theme = Theme.of(context);
     final colorScheme = theme.colorScheme;
     final opacityPercent = (opacity.clamp(0.35, 1.0) * 100).round();
+    final zoomPercent = (zoomFactor.clamp(0.55, 3.0) * 100).round();
 
     return Center(
       child: Column(
@@ -483,23 +487,36 @@ class _ReticleOptionsPanel extends StatelessWidget {
                   ),
                 ),
               ),
-              const SizedBox(width: AppSpacing.sm),
-              _ReticleRoundIconButton(
-                tooltip: 'Reset measurement',
-                icon: Icons.refresh_rounded,
-                onPressed: onReset,
-              ),
+              // const SizedBox(width: AppSpacing.sm),
+              // _ReticleRoundIconButton(
+              //   tooltip: 'Reset measurement',
+              //   icon: Icons.refresh_rounded,
+              //   onPressed: onReset,
+              // ),
               const SizedBox(width: AppSpacing.sm),
               _ReticleRoundIconButton(
                 tooltip: 'Zoom out reticle',
                 icon: Icons.zoom_out_rounded,
-                onPressed: () => onZoomStep(-0.1),
+                onPressed: () => onZoomStep(-0.25),
+              ),
+              const SizedBox(width: AppSpacing.sm),
+              SizedBox(
+                width: 64,
+                child: Text(
+                  '$zoomPercent%',
+                  textAlign: TextAlign.center,
+                  style: theme.textTheme.titleMedium?.copyWith(
+                    color: colorScheme.onSurfaceVariant,
+                    fontWeight: FontWeight.w800,
+                    fontFeatures: const [FontFeature.tabularFigures()],
+                  ),
+                ),
               ),
               const SizedBox(width: AppSpacing.sm),
               _ReticleRoundIconButton(
                 tooltip: 'Zoom in reticle',
                 icon: Icons.zoom_in_rounded,
-                onPressed: () => onZoomStep(0.1),
+                onPressed: () => onZoomStep(0.25),
               ),
             ],
           ),
