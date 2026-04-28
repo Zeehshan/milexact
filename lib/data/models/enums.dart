@@ -43,35 +43,41 @@ extension ReticleTypeX on ReticleType {
   };
 }
 
-enum ReticleProfile { milDot, christmasTree, duplex, simpleCrosshair }
+enum ReticleProfile { milDot, milHash05, milHash02, christmasTree, duplex }
 
 extension ReticleProfileX on ReticleProfile {
   String get label => switch (this) {
     ReticleProfile.milDot => 'Mil-Dot',
+    ReticleProfile.milHash05 => 'Mil-Hash 0.5',
+    ReticleProfile.milHash02 => 'Mil-Hash 0.2',
     ReticleProfile.christmasTree => 'Christmas Tree',
     ReticleProfile.duplex => 'Duplex',
-    ReticleProfile.simpleCrosshair => 'Simple Crosshair',
   };
 
   String get description => switch (this) {
-    ReticleProfile.milDot => 'Classic military dot reticle',
-    ReticleProfile.christmasTree => 'Tree hold pattern with lower stadia',
-    ReticleProfile.duplex => 'Thick-to-thin post reticle',
-    ReticleProfile.simpleCrosshair => 'Basic fine crosshair',
+    ReticleProfile.milDot => 'Classic military dot reticle — dots at 1.0 MIL',
+    ReticleProfile.milHash05 => 'Hash crosshair — major 1.0, minor 0.5 MIL',
+    ReticleProfile.milHash02 =>
+      'Fine hash crosshair — major 1.0, minor 0.2 MIL',
+    ReticleProfile.christmasTree =>
+      'TREMOR3-style — major hashes every 1.0 MIL, minor hashes every 0.2 MIL',
+    ReticleProfile.duplex => 'Thick outer posts — fine center wires',
   };
 
   String get heightGuide => switch (this) {
     ReticleProfile.milDot => '1, 2, 3, 4, 5',
+    ReticleProfile.milHash05 => '1, 2, 3, 4, 5',
+    ReticleProfile.milHash02 => '1, 2, 3, 4, 5',
     ReticleProfile.christmasTree => '2-16 rows',
     ReticleProfile.duplex => 'post gap ~2.5',
-    ReticleProfile.simpleCrosshair => '1, 2, 3, 4, 5',
   };
 
   String get widthGuide => switch (this) {
     ReticleProfile.milDot => '1, 2, 3, 4, 5',
+    ReticleProfile.milHash05 => '1, 2, 3, 4, 5',
+    ReticleProfile.milHash02 => '1, 2, 3, 4, 5',
     ReticleProfile.christmasTree => '±1-8.5 dots',
     ReticleProfile.duplex => 'post gap ~2.5',
-    ReticleProfile.simpleCrosshair => '1, 2, 3, 4, 5',
   };
 
   String guideLabel({

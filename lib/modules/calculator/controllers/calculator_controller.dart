@@ -43,7 +43,7 @@ class CalculatorController extends GetxController {
   final selectedPresetId = RxnString();
   final selectedTargetUnit = UnitType.meter.obs;
   final selectedReticleType = ReticleType.mil.obs;
-  final selectedReticleProfile = ReticleProfile.simpleCrosshair.obs;
+  final selectedReticleProfile = ReticleProfile.milHash05.obs;
   final displayPreference = DistanceDisplayPreference.both.obs;
   final liveCalculationEnabled = true.obs;
   final isMeasurementModeEnabled = false.obs;
@@ -55,8 +55,10 @@ class CalculatorController extends GetxController {
       ReticleMeasurementService.zeroLineFraction.obs;
   final verticalMeasurementFraction =
       (ReticleMeasurementService.zeroLineFraction + 0.12).obs;
-  final horizontalBaselineFraction = 0.5.obs;
-  final horizontalMeasurementFraction = 0.62.obs;
+  final horizontalBaselineFraction =
+      ReticleMeasurementService.zeroLineFraction.obs;
+  final horizontalMeasurementFraction =
+      (ReticleMeasurementService.zeroLineFraction + 0.12).obs;
   final manualTargetName = ''.obs;
   final manualTargetHeightInput = ''.obs;
   final manualTargetWidthInput = ''.obs;
@@ -221,7 +223,7 @@ class CalculatorController extends GetxController {
   }
 
   void setReticleOverlayOpacity(double value) {
-    reticleOverlayOpacity.value = value.clamp(0.35, 1.0);
+    reticleOverlayOpacity.value = value.clamp(0.2, 1.0);
   }
 
   void adjustReticleOverlayOpacity(double delta) {
@@ -238,7 +240,8 @@ class CalculatorController extends GetxController {
 
   void resetReticleMeasurement() {
     verticalBaselineFraction.value = ReticleMeasurementService.zeroLineFraction;
-    horizontalBaselineFraction.value = 0.5;
+    horizontalBaselineFraction.value =
+        ReticleMeasurementService.zeroLineFraction;
 
     const defaultReading = 1.0;
     final initialHandle = _reticleMeasurementService.handleFractionFromReading(
@@ -303,7 +306,7 @@ class CalculatorController extends GetxController {
     required Offset localPosition,
     required Size canvasSize,
   }) {
-    updateReticleBaselineFromLocalPosition(
+    updateReticleFromLocalPosition(
       localPosition: localPosition,
       canvasSize: canvasSize,
     );
@@ -313,33 +316,16 @@ class CalculatorController extends GetxController {
     required Offset localPosition,
     required Size canvasSize,
   }) {
-    final mainAxisPosition =
-        referenceDimension.value == TargetDimensionType.height
-        ? localPosition.dy
-        : localPosition.dx;
-    final mainAxisExtent =
-        referenceDimension.value == TargetDimensionType.height
-        ? canvasSize.height
-        : canvasSize.width;
-
-    final baselineFraction = _reticleMeasurementService
-        .positionFractionFromLocalPosition(
-          mainAxisPosition: mainAxisPosition,
-          mainAxisExtent: mainAxisExtent,
-        );
-
     if (referenceDimension.value == TargetDimensionType.height) {
-      verticalBaselineFraction.value = baselineFraction;
-      verticalMeasurementFraction.value = baselineFraction;
+      verticalBaselineFraction.value =
+          ReticleMeasurementService.zeroLineFraction;
     } else {
-      horizontalBaselineFraction.value = baselineFraction;
-      horizontalMeasurementFraction.value = baselineFraction;
+      horizontalBaselineFraction.value =
+          ReticleMeasurementService.zeroLineFraction;
     }
-
-    reticleHandleFraction.value = 0;
-    reticleReadingController.value = const TextEditingValue(
-      text: '',
-      selection: TextSelection.collapsed(offset: 0),
+    updateReticleFromLocalPosition(
+      localPosition: localPosition,
+      canvasSize: canvasSize,
     );
   }
 

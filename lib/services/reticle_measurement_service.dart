@@ -6,7 +6,7 @@ class ReticleMeasurementService extends GetxService {
   static const double minReading = 0.1;
   static const double maxReading = 20.0;
   static const double maxHandleFraction = 0.46;
-  static const double zeroLineFraction = 0.63;
+  static const double zeroLineFraction = 0.5;
   static const double minPositionFraction = 0.04;
   static const double maxPositionFraction = 0.96;
 
