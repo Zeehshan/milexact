@@ -1,0 +1,46 @@
+{
+  "project_info": {
+    "project_number": "385820237799",
+    "project_id": "milexact-88618",
+    "storage_bucket": "milexact-88618.firebasestorage.app"
+  },
+  "client": [
+    {
+      "client_info": {
+        "mobilesdk_app_id": "1:385820237799:android:9f29a4327b59e304c6e742",
+        "android_client_info": {
+          "package_name": "com.milexact.app"
+        }
+      },
+      "oauth_client": [
+        {
+          "client_id": "385820237799-orc4fvebcoami85d01405m57t213gqch.apps.googleusercontent.com",
+          "client_type": 3
+        }
+      ],
+      "api_key": [
+        {
+          "current_key": "AIzaSyC6Ds6puUZIdmzsf3h9ms3P2nw0zPiljSM"
+        }
+      ],
+      "services": {
+        "appinvite_service": {
+          "other_platform_oauth_client": [
+            {
+              "client_id": "385820237799-orc4fvebcoami85d01405m57t213gqch.apps.googleusercontent.com",
+              "client_type": 3
+            },
+            {
+              "client_id": "385820237799-r8ar7c5c50o60311luitqrkqpb5ckmqb.apps.googleusercontent.com",
+              "client_type": 2,
+              "ios_info": {
+                "bundle_id": "com.milexact.app"
+              }
+            }
+          ]
+        }
+      }
+    }
+  ],
+  "configuration_version": "1"
+}

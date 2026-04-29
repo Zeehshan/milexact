@@ -16,7 +16,8 @@ class SignUpScreen extends GetView<SignUpController> {
       backLabel: 'Back to sign in',
       onBack: Get.back,
       title: 'Create your account',
-      subtitle: 'Set up a local MilExact account for this device.',
+      subtitle:
+          'Create a Firebase-backed MilExact account and verify your email.',
       child: Obx(
         () => Column(
           crossAxisAlignment: CrossAxisAlignment.stretch,

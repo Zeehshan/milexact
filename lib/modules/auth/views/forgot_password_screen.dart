@@ -16,7 +16,8 @@ class ForgotPasswordScreen extends GetView<ForgotPasswordController> {
       backLabel: 'Back to sign in',
       onBack: Get.back,
       title: 'Reset your password',
-      subtitle: 'Enter your email and we will prepare a local reset flow.',
+      subtitle:
+          'Enter your email and we will send a Firebase password reset link.',
       child: Obx(
         () => Column(
           crossAxisAlignment: CrossAxisAlignment.stretch,

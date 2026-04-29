@@ -1,53 +1,85 @@
-import 'dart:convert';
+import 'dart:async';
 
 import 'package:get/get.dart';
 import 'package:milexact/app/routes/app_routes.dart';
-import 'package:milexact/data/models/auth_user.dart';
-import 'package:milexact/data/repositories/auth_repository.dart';
-import 'package:milexact/services/auth_api_service.dart';
-import 'package:milexact/services/social_identity_service.dart';
-import 'package:milexact/shared/utils/id_generator.dart';
+import 'package:milexact/domain/auth/entities/app_user.dart';
+import 'package:milexact/domain/auth/exceptions/auth_exception.dart';
+import 'package:milexact/domain/auth/use_cases/observe_auth_state_use_case.dart';
+import 'package:milexact/domain/auth/use_cases/reload_current_user_use_case.dart';
+import 'package:milexact/domain/auth/use_cases/restore_current_user_use_case.dart';
+import 'package:milexact/domain/auth/use_cases/send_email_verification_use_case.dart';
+import 'package:milexact/domain/auth/use_cases/send_password_reset_email_use_case.dart';
+import 'package:milexact/domain/auth/use_cases/sign_in_with_apple_use_case.dart';
+import 'package:milexact/domain/auth/use_cases/sign_in_with_email_use_case.dart';
+import 'package:milexact/domain/auth/use_cases/sign_in_with_google_use_case.dart';
+import 'package:milexact/domain/auth/use_cases/sign_out_use_case.dart';
+import 'package:milexact/domain/auth/use_cases/sign_up_with_email_use_case.dart';
+
+export 'package:milexact/domain/auth/exceptions/auth_exception.dart';
 
 class AuthService extends GetxService {
-  AuthService(
-    this._repository,
-    this._authApiService,
-    this._socialIdentityService,
-  );
+  AuthService({
+    required ObserveAuthStateUseCase observeAuthStateUseCase,
+    required RestoreCurrentUserUseCase restoreCurrentUserUseCase,
+    required ReloadCurrentUserUseCase reloadCurrentUserUseCase,
+    required SignUpWithEmailUseCase signUpWithEmailUseCase,
+    required SignInWithEmailUseCase signInWithEmailUseCase,
+    required SignInWithGoogleUseCase signInWithGoogleUseCase,
+    required SignInWithAppleUseCase signInWithAppleUseCase,
+    required SendPasswordResetEmailUseCase sendPasswordResetEmailUseCase,
+    required SendEmailVerificationUseCase sendEmailVerificationUseCase,
+    required SignOutUseCase signOutUseCase,
+  }) : _observeAuthStateUseCase = observeAuthStateUseCase,
+       _restoreCurrentUserUseCase = restoreCurrentUserUseCase,
+       _reloadCurrentUserUseCase = reloadCurrentUserUseCase,
+       _signUpWithEmailUseCase = signUpWithEmailUseCase,
+       _signInWithEmailUseCase = signInWithEmailUseCase,
+       _signInWithGoogleUseCase = signInWithGoogleUseCase,
+       _signInWithAppleUseCase = signInWithAppleUseCase,
+       _sendPasswordResetEmailUseCase = sendPasswordResetEmailUseCase,
+       _sendEmailVerificationUseCase = sendEmailVerificationUseCase,
+       _signOutUseCase = signOutUseCase;
 
   static final _emailPattern = RegExp(
     r'^[A-Z0-9._%+-]+@[A-Z0-9.-]+\.[A-Z]{2,}$',
     caseSensitive: false,
   );
 
-  final AuthRepository _repository;
-  final AuthApiService _authApiService;
-  final SocialIdentityService _socialIdentityService;
+  final ObserveAuthStateUseCase _observeAuthStateUseCase;
+  final RestoreCurrentUserUseCase _restoreCurrentUserUseCase;
+  final ReloadCurrentUserUseCase _reloadCurrentUserUseCase;
+  final SignUpWithEmailUseCase _signUpWithEmailUseCase;
+  final SignInWithEmailUseCase _signInWithEmailUseCase;
+  final SignInWithGoogleUseCase _signInWithGoogleUseCase;
+  final SignInWithAppleUseCase _signInWithAppleUseCase;
+  final SendPasswordResetEmailUseCase _sendPasswordResetEmailUseCase;
+  final SendEmailVerificationUseCase _sendEmailVerificationUseCase;
+  final SignOutUseCase _signOutUseCase;
 
-  Rxn<AuthUser> get currentUser => _repository.currentUser;
+  final Rxn<AppUser> currentUser = Rxn<AppUser>();
+
+  StreamSubscription<AppUser?>? _authSubscription;
+
   bool get isSignedIn => currentUser.value != null;
+  bool get supportsAppleSignIn => GetPlatform.isIOS;
+
+  bool get needsEmailVerification =>
+      currentUser.value?.requiresEmailVerification ?? false;
+
+  bool get canAccessApp => isSignedIn && !needsEmailVerification;
+
+  Future<AuthService> init() async {
+    currentUser.value = await _restoreCurrentUserUseCase();
+    _authSubscription = _observeAuthStateUseCase().listen((user) {
+      currentUser.value = user;
+    });
+    return this;
+  }
 
   String normalizeEmail(String email) => email.trim().toLowerCase();
 
   bool isValidEmail(String email) =>
       _emailPattern.hasMatch(normalizeEmail(email));
-
-  String hashPassword({required String email, required String password}) {
-    final base = '${normalizeEmail(email)}::$password::milexact-auth-v1';
-    var payload = utf8.encode(base);
-    var hash = 0xcbf29ce484222325;
-    const prime = 0x100000001b3;
-
-    for (var round = 0; round < 512; round++) {
-      for (final byte in payload) {
-        hash ^= byte;
-        hash = (hash * prime) & 0xFFFFFFFFFFFFFFFF;
-      }
-      payload = utf8.encode('$base::$round::$hash');
-    }
-
-    return hash.toRadixString(16).padLeft(16, '0');
-  }
 
   Future<void> signUp({required String email, required String password}) async {
     final normalizedEmail = normalizeEmail(email);
@@ -58,40 +90,32 @@ class AuthService extends GetxService {
     if (password.trim().length < 8) {
       throw const AuthException('Password must be at least 8 characters.');
     }
-    if (_repository.userByEmail(normalizedEmail) != null) {
-      throw const AuthException('An account with this email already exists.');
-    }
 
-    final now = DateTime.now();
-    final user = AuthUser(
-      id: IdGenerator.generate(prefix: 'user'),
+    final user = await _signUpWithEmailUseCase(
       email: normalizedEmail,
-      passwordHash: hashPassword(email: normalizedEmail, password: password),
-      createdAt: now,
-      updatedAt: now,
+      password: password,
     );
-
-    await _repository.upsertUser(user);
-    await _repository.saveSession(user);
+    currentUser.value = user;
+    await _sendEmailVerificationUseCase();
+    await refreshCurrentUser();
   }
 
   Future<void> signIn({required String email, required String password}) async {
     final normalizedEmail = normalizeEmail(email);
-    final user = _repository.userByEmail(normalizedEmail);
 
-    if (user == null) {
-      throw const AuthException('No account found for this email.');
+    if (!isValidEmail(normalizedEmail)) {
+      throw const AuthException('Enter a valid email address.');
+    }
+    if (password.isEmpty) {
+      throw const AuthException('Enter your password.');
     }
 
-    final passwordHash = hashPassword(
+    final user = await _signInWithEmailUseCase(
       email: normalizedEmail,
       password: password,
     );
-    if (user.passwordHash != passwordHash) {
-      throw const AuthException('Incorrect password.');
-    }
-
-    await _repository.saveSession(user);
+    currentUser.value = user;
+    await refreshCurrentUser();
   }
 
   Future<String> requestPasswordReset({required String email}) async {
@@ -100,10 +124,8 @@ class AuthService extends GetxService {
     if (!isValidEmail(normalizedEmail)) {
       throw const AuthException('Enter a valid email address.');
     }
-    if (_repository.userByEmail(normalizedEmail) == null) {
-      throw const AuthException('No account found for this email.');
-    }
 
+    await _sendPasswordResetEmailUseCase(email: normalizedEmail);
     return normalizedEmail;
   }
 
@@ -111,77 +133,48 @@ class AuthService extends GetxService {
     required String email,
     required String newPassword,
   }) async {
-    final normalizedEmail = normalizeEmail(email);
-    final user = _repository.userByEmail(normalizedEmail);
-
-    if (user == null) {
-      throw const AuthException('No account found for this email.');
-    }
-    if (newPassword.trim().length < 8) {
-      throw const AuthException('Password must be at least 8 characters.');
-    }
-
-    await _repository.upsertUser(
-      user.copyWith(
-        passwordHash: hashPassword(
-          email: normalizedEmail,
-          password: newPassword,
-        ),
-        updatedAt: DateTime.now(),
-      ),
+    throw const AuthException(
+      'Password reset is handled from the Firebase email link.',
     );
-    await _repository.clearSession();
   }
 
   Future<void> signOut() async {
-    await _repository.clearSession();
+    await _signOutUseCase();
+    currentUser.value = null;
     Get.offAllNamed(AppRoutes.signIn);
   }
 
   Future<void> signInWithGoogle() async {
-    final identity = await _socialIdentityService.requestGoogleIdentity();
-    final result = await _authApiService.signInWithGoogle(
-      idToken: identity.idToken,
-      accessToken: identity.accessToken,
-      email: identity.email,
-    );
-    await _completeSocialSignIn(email: result.email);
+    final user = await _signInWithGoogleUseCase();
+    currentUser.value = user;
+    await refreshCurrentUser();
   }
 
   Future<void> signInWithApple() async {
-    final identity = await _socialIdentityService.requestAppleIdentity();
-    final result = await _authApiService.signInWithApple(
-      identityToken: identity.identityToken,
-      authorizationCode: identity.authorizationCode,
-      email: identity.email,
-      givenName: identity.givenName,
-      familyName: identity.familyName,
-    );
-    await _completeSocialSignIn(email: result.email);
+    if (!supportsAppleSignIn) {
+      throw const AuthException('Apple sign-in is available on iOS only.');
+    }
+
+    final user = await _signInWithAppleUseCase();
+    currentUser.value = user;
+    await refreshCurrentUser();
   }
 
-  Future<void> _completeSocialSignIn({required String email}) async {
-    final normalizedEmail = normalizeEmail(email);
-    final existing = _repository.userByEmail(normalizedEmail);
-    final now = DateTime.now();
-    final user =
-        existing ??
-        AuthUser(
-          id: IdGenerator.generate(prefix: 'user'),
-          email: normalizedEmail,
-          passwordHash: '',
-          createdAt: now,
-          updatedAt: now,
-        );
+  Future<void> resendEmailVerification() => _sendEmailVerificationUseCase();
 
-    final updatedUser = user.copyWith(email: normalizedEmail, updatedAt: now);
-    await _repository.upsertUser(updatedUser);
-    await _repository.saveSession(updatedUser);
+  Future<AppUser?> refreshCurrentUser() async {
+    currentUser.value = await _reloadCurrentUserUseCase();
+    return currentUser.value;
   }
-}
 
-class AuthException implements Exception {
-  const AuthException(this.message);
+  Future<bool> refreshVerificationStatus() async {
+    final user = await refreshCurrentUser();
+    return user?.emailVerified ?? false;
+  }
 
-  final String message;
+  @override
+  void onClose() {
+    _authSubscription?.cancel();
+    super.onClose();
+  }
 }

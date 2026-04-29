@@ -1,8 +1,5 @@
 class SocialAuthResult {
-  const SocialAuthResult({
-    required this.email,
-    required this.sessionToken,
-  });
+  const SocialAuthResult({required this.email, required this.sessionToken});
 
   final String email;
   final String sessionToken;

@@ -1,4 +1,4 @@
-package com.example.milexact
+package com.milexact.app
 
 import io.flutter.embedding.android.FlutterActivity
 

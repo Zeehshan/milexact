@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:get/get.dart';
 import 'package:milexact/app/routes/app_routes.dart';
+import 'package:milexact/modules/auth/models/check_email_mode.dart';
 import 'package:milexact/services/auth_service.dart';
 
 class SignUpController extends GetxController {
@@ -52,7 +53,13 @@ class SignUpController extends GetxController {
 
     try {
       await _authService.signUp(email: email, password: password);
-      Get.offAllNamed(AppRoutes.home);
+      Get.offAllNamed(
+        AppRoutes.checkEmail,
+        arguments: <String, dynamic>{
+          'email': _authService.currentUser.value?.email ?? email.trim(),
+          'mode': CheckEmailMode.verification.routeValue,
+        },
+      );
     } on AuthException catch (error) {
       errorMessage.value = error.message;
     } finally {

@@ -34,20 +34,22 @@ class SignInScreen extends GetView<SignInController> {
                   : const _GoogleBadge(),
               label: const Text('Continue with Google'),
             ),
-            const SizedBox(height: AppSpacing.sm),
-            OutlinedButton.icon(
-              onPressed: controller.socialLoadingProvider.value == null
-                  ? controller.signInWithApple
-                  : null,
-              icon: controller.socialLoadingProvider.value == 'apple'
-                  ? const SizedBox(
-                      width: 18,
-                      height: 18,
-                      child: CircularProgressIndicator(strokeWidth: 2),
-                    )
-                  : const Icon(Icons.apple_rounded),
-              label: const Text('Continue with Apple'),
-            ),
+            if (controller.supportsAppleSignIn) ...[
+              const SizedBox(height: AppSpacing.sm),
+              OutlinedButton.icon(
+                onPressed: controller.socialLoadingProvider.value == null
+                    ? controller.signInWithApple
+                    : null,
+                icon: controller.socialLoadingProvider.value == 'apple'
+                    ? const SizedBox(
+                        width: 18,
+                        height: 18,
+                        child: CircularProgressIndicator(strokeWidth: 2),
+                      )
+                    : const Icon(Icons.apple_rounded),
+                label: const Text('Continue with Apple'),
+              ),
+            ],
             const SizedBox(height: AppSpacing.md),
             Row(
               children: [

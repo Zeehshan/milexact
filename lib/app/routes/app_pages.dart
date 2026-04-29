@@ -3,6 +3,7 @@ import 'package:milexact/app/middleware/auth_guard_middleware.dart';
 import 'package:milexact/app/routes/app_routes.dart';
 import 'package:milexact/modules/app_shell/bindings/app_shell_binding.dart';
 import 'package:milexact/modules/app_shell/views/app_shell_screen.dart';
+import 'package:milexact/modules/auth/bindings/check_email_binding.dart';
 import 'package:milexact/modules/auth/bindings/forgot_password_binding.dart';
 import 'package:milexact/modules/auth/bindings/reset_password_binding.dart';
 import 'package:milexact/modules/auth/bindings/sign_in_binding.dart';
@@ -58,6 +59,7 @@ class AppPages {
     GetPage(
       name: AppRoutes.checkEmail,
       page: CheckEmailScreen.new,
+      binding: CheckEmailBinding(),
       middlewares: [AuthGuardMiddleware(requiresAuth: false)],
     ),
     GetPage(
