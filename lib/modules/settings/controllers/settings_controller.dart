@@ -1,8 +1,8 @@
 import 'package:get/get.dart';
 import 'package:milexact/data/models/app_settings.dart';
 import 'package:milexact/data/models/enums.dart';
-import 'package:milexact/domain/auth/entities/app_user.dart';
 import 'package:milexact/data/repositories/settings_repository.dart';
+import 'package:milexact/domain/auth/auth.dart';
 import 'package:milexact/services/auth_service.dart';
 
 class SettingsController extends GetxController {

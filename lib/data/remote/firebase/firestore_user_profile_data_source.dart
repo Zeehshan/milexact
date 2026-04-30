@@ -1,7 +1,6 @@
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:firebase_core/firebase_core.dart';
-import 'package:milexact/domain/auth/entities/app_user.dart';
-import 'package:milexact/domain/auth/exceptions/auth_exception.dart';
+import 'package:milexact/domain/auth/auth.dart';
 
 class FirestoreUserProfileDataSource {
   FirestoreUserProfileDataSource({FirebaseFirestore? firestore})

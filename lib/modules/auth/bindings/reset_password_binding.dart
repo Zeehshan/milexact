@@ -1,5 +1,5 @@
 import 'package:get/get.dart';
-import 'package:milexact/modules/auth/controllers/reset_password_controller.dart';
+import 'package:milexact/modules/auth/controllers/controllers.dart';
 
 class ResetPasswordBinding extends Bindings {
   @override

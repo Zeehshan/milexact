@@ -1,6 +1,6 @@
 import 'package:get/get.dart';
-import 'package:milexact/modules/auth/controllers/check_email_controller.dart';
-import 'package:milexact/modules/auth/models/check_email_mode.dart';
+import 'package:milexact/modules/auth/controllers/controllers.dart';
+import 'package:milexact/modules/auth/models/models.dart';
 import 'package:milexact/services/auth_service.dart';
 
 class CheckEmailBinding extends Bindings {

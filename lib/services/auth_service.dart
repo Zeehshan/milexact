@@ -2,20 +2,9 @@ import 'dart:async';
 
 import 'package:get/get.dart';
 import 'package:milexact/app/routes/app_routes.dart';
-import 'package:milexact/domain/auth/entities/app_user.dart';
-import 'package:milexact/domain/auth/exceptions/auth_exception.dart';
-import 'package:milexact/domain/auth/use_cases/observe_auth_state_use_case.dart';
-import 'package:milexact/domain/auth/use_cases/reload_current_user_use_case.dart';
-import 'package:milexact/domain/auth/use_cases/restore_current_user_use_case.dart';
-import 'package:milexact/domain/auth/use_cases/send_email_verification_use_case.dart';
-import 'package:milexact/domain/auth/use_cases/send_password_reset_email_use_case.dart';
-import 'package:milexact/domain/auth/use_cases/sign_in_with_apple_use_case.dart';
-import 'package:milexact/domain/auth/use_cases/sign_in_with_email_use_case.dart';
-import 'package:milexact/domain/auth/use_cases/sign_in_with_google_use_case.dart';
-import 'package:milexact/domain/auth/use_cases/sign_out_use_case.dart';
-import 'package:milexact/domain/auth/use_cases/sign_up_with_email_use_case.dart';
+import 'package:milexact/domain/auth/auth.dart';
 
-export 'package:milexact/domain/auth/exceptions/auth_exception.dart';
+export 'package:milexact/domain/auth/auth.dart' show AuthException;
 
 class AuthService extends GetxService {
   AuthService({

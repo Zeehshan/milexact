@@ -1,6 +1,6 @@
 import 'package:get/get.dart';
 import 'package:milexact/app/routes/app_routes.dart';
-import 'package:milexact/modules/auth/models/check_email_mode.dart';
+import 'package:milexact/modules/auth/models/models.dart';
 import 'package:milexact/services/auth_service.dart';
 
 class CheckEmailController extends GetxController {

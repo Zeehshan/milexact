@@ -2,11 +2,8 @@ import 'dart:async';
 
 import 'package:firebase_auth/firebase_auth.dart';
 import 'package:get/get.dart';
-import 'package:milexact/data/remote/firebase/firebase_auth_data_source.dart';
-import 'package:milexact/data/remote/firebase/firestore_user_profile_data_source.dart';
-import 'package:milexact/domain/auth/entities/app_user.dart';
-import 'package:milexact/domain/auth/exceptions/auth_exception.dart';
-import 'package:milexact/domain/auth/repositories/auth_repository_contract.dart';
+import 'package:milexact/data/remote/firebase/firebase.dart';
+import 'package:milexact/domain/auth/auth.dart';
 
 class AuthRepository extends GetxService implements AuthRepositoryContract {
   AuthRepository(this._authDataSource, this._profileDataSource);

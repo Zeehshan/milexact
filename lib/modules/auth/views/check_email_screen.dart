@@ -1,7 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:get/get.dart';
 import 'package:milexact/app/theme/app_colors.dart';
-import 'package:milexact/modules/auth/controllers/check_email_controller.dart';
+import 'package:milexact/modules/auth/controllers/controllers.dart';
 import 'package:milexact/modules/auth/widgets/auth_card_layout.dart';
 import 'package:milexact/shared/constants/app_spacing.dart';
 

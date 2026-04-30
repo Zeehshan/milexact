@@ -1,5 +1,5 @@
 import 'package:get/get.dart';
-import 'package:milexact/modules/auth/controllers/sign_in_controller.dart';
+import 'package:milexact/modules/auth/controllers/controllers.dart';
 import 'package:milexact/services/auth_service.dart';
 
 class SignInBinding extends Bindings {
