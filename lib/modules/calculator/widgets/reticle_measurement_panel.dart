@@ -416,7 +416,7 @@ class ReticleMeasurementPainter extends CustomPainter {
           center,
           radius,
           minorTicksPerMil: 5,
-          majorHalfLength: 14,
+          majorHalfLength: 8,
           minorHalfLength: 4,
           majorStrokeWidth: 1.6,
           minorStrokeWidth: 1.05,
@@ -692,6 +692,37 @@ class ReticleMeasurementPainter extends CustomPainter {
       ..color = _reticleCenterDotColor
       ..style = PaintingStyle.fill;
 
+    final totalMinorTicks = minorTicksPerMil * 5;
+    for (var tick = 1; tick < totalMinorTicks; tick++) {
+      if (tick % minorTicksPerMil == 0) {
+        continue;
+      }
+      final minorOffset = minorStep * tick;
+      if (minorOffset >= radius + 0.001) {
+        continue;
+      }
+      canvas.drawLine(
+        Offset(center.dx - minorHalfLength, center.dy - minorOffset),
+        Offset(center.dx + minorHalfLength, center.dy - minorOffset),
+        minorPaint,
+      );
+      canvas.drawLine(
+        Offset(center.dx - minorHalfLength, center.dy + minorOffset),
+        Offset(center.dx + minorHalfLength, center.dy + minorOffset),
+        minorPaint,
+      );
+      canvas.drawLine(
+        Offset(center.dx - minorOffset, center.dy - minorHalfLength),
+        Offset(center.dx - minorOffset, center.dy + minorHalfLength),
+        minorPaint,
+      );
+      canvas.drawLine(
+        Offset(center.dx + minorOffset, center.dy - minorHalfLength),
+        Offset(center.dx + minorOffset, center.dy + minorHalfLength),
+        minorPaint,
+      );
+    }
+
     for (var i = 1; i <= 5; i++) {
       final offset = majorStep * i;
       canvas.drawLine(
@@ -714,39 +745,6 @@ class ReticleMeasurementPainter extends CustomPainter {
         Offset(center.dx + offset, center.dy + majorHalfLength),
         majorPaint,
       );
-
-      if (i < 5) {
-        for (
-          var subdivision = 1;
-          subdivision < minorTicksPerMil;
-          subdivision++
-        ) {
-          final minorOffset = offset + (minorStep * subdivision);
-          if (minorOffset >= radius + 0.001) {
-            continue;
-          }
-          canvas.drawLine(
-            Offset(center.dx - minorHalfLength, center.dy - minorOffset),
-            Offset(center.dx + minorHalfLength, center.dy - minorOffset),
-            minorPaint,
-          );
-          canvas.drawLine(
-            Offset(center.dx - minorHalfLength, center.dy + minorOffset),
-            Offset(center.dx + minorHalfLength, center.dy + minorOffset),
-            minorPaint,
-          );
-          canvas.drawLine(
-            Offset(center.dx - minorOffset, center.dy - minorHalfLength),
-            Offset(center.dx - minorOffset, center.dy + minorHalfLength),
-            minorPaint,
-          );
-          canvas.drawLine(
-            Offset(center.dx + minorOffset, center.dy - minorHalfLength),
-            Offset(center.dx + minorOffset, center.dy + minorHalfLength),
-            minorPaint,
-          );
-        }
-      }
     }
 
     canvas.drawCircle(center, centerDotRadius, centerDotPaint);
@@ -802,7 +800,7 @@ class ReticleMeasurementPainter extends CustomPainter {
         }
 
         final isMajor = tick % 5 == 0;
-        final tickHalfHeight = isMajor ? 13.0 : 6.0;
+        final tickHalfHeight = isMajor ? 7.0 : 6.0;
         final paint = isMajor ? majorTickPaint : minorTickPaint;
 
         canvas.drawLine(
@@ -818,27 +816,27 @@ class ReticleMeasurementPainter extends CustomPainter {
       }
 
       canvas.drawLine(
-        Offset(center.dx - halfWidth, y - 15),
-        Offset(center.dx - halfWidth, y + 15),
+        Offset(center.dx - halfWidth, y - 8),
+        Offset(center.dx - halfWidth, y + 8),
         majorTickPaint,
       );
       canvas.drawLine(
-        Offset(center.dx + halfWidth, y - 15),
-        Offset(center.dx + halfWidth, y + 15),
+        Offset(center.dx + halfWidth, y - 8),
+        Offset(center.dx + halfWidth, y + 8),
         majorTickPaint,
       );
 
-      if (row <= 3) {
-        _paintText(
+      if (row <= 5) {
+        _paintCenteredText(
           canvas,
           text: '$row',
-          offset: Offset(center.dx - halfWidth - 28, y - 13),
+          center: Offset(center.dx - halfWidth - 18, y - 2),
           style: treeLabelStyle,
         );
-        _paintText(
+        _paintCenteredText(
           canvas,
           text: '$row',
-          offset: Offset(center.dx + halfWidth + 12, y - 13),
+          center: Offset(center.dx + halfWidth + 18, y - 2),
           style: treeLabelStyle,
         );
       }
@@ -937,28 +935,18 @@ class ReticleMeasurementPainter extends CustomPainter {
     );
     final step = radius / 5;
 
-    for (var i = 1; i <= 3; i++) {
-      final offset = step * i;
-      _paintText(
-        canvas,
-        text: '$i',
-        offset: Offset(center.dx + offset - 4, center.dy - 22),
-        style: labelStyle,
-      );
-      _paintText(
-        canvas,
-        text: '$i',
-        offset: Offset(center.dx - offset - 10, center.dy - 22),
-        style: labelStyle,
-      );
-    }
-
     for (var i = 1; i <= 5; i++) {
       final offset = step * i;
-      _paintText(
+      _paintCenteredText(
         canvas,
         text: '$i',
-        offset: Offset(center.dx - 50, center.dy + offset - 15),
+        center: Offset(center.dx + offset, center.dy - 18),
+        style: labelStyle,
+      );
+      _paintCenteredText(
+        canvas,
+        text: '$i',
+        center: Offset(center.dx - offset, center.dy - 18),
         style: labelStyle,
       );
     }
@@ -1043,6 +1031,19 @@ class ReticleMeasurementPainter extends CustomPainter {
     required TextStyle style,
   }) {
     _textPainter(text, style).paint(canvas, offset);
+  }
+
+  void _paintCenteredText(
+    Canvas canvas, {
+    required String text,
+    required Offset center,
+    required TextStyle style,
+  }) {
+    final painter = _textPainter(text, style);
+    painter.paint(
+      canvas,
+      Offset(center.dx - (painter.width / 2), center.dy - (painter.height / 2)),
+    );
   }
 
   void _drawDashedLine({
