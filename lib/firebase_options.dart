@@ -3,6 +3,9 @@ import 'package:flutter/foundation.dart'
     show defaultTargetPlatform, TargetPlatform;
 
 class DefaultFirebaseOptions {
+  static const googleWebClientId =
+      '385820237799-orc4fvebcoami85d01405m57t213gqch.apps.googleusercontent.com';
+
   static FirebaseOptions get currentPlatform {
     switch (defaultTargetPlatform) {
       case TargetPlatform.android:

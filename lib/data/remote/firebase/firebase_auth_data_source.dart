@@ -1,7 +1,9 @@
 import 'package:firebase_auth/firebase_auth.dart';
 import 'package:firebase_core/firebase_core.dart';
+import 'package:flutter/foundation.dart';
 import 'package:google_sign_in/google_sign_in.dart';
 import 'package:milexact/domain/auth/auth.dart';
+import 'package:milexact/firebase_options.dart';
 
 class FirebaseAuthDataSource {
   FirebaseAuthDataSource({GoogleSignIn? googleSignIn})
@@ -108,7 +110,16 @@ class FirebaseAuthDataSource {
     if (_googleInitialized) {
       return;
     }
-    await _googleSignIn.initialize();
+    await _googleSignIn.initialize(
+      clientId: switch (defaultTargetPlatform) {
+        TargetPlatform.iOS => DefaultFirebaseOptions.ios.iosClientId,
+        _ => null,
+      },
+      serverClientId: switch (defaultTargetPlatform) {
+        TargetPlatform.android => DefaultFirebaseOptions.googleWebClientId,
+        _ => null,
+      },
+    );
     _googleInitialized = true;
   }
 }
