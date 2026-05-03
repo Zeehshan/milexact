@@ -13,6 +13,13 @@ import 'package:milexact/shared/widgets/empty_state_view.dart';
 import 'package:milexact/shared/widgets/section_card.dart';
 import 'package:milexact/shared/widgets/tactical_scaffold.dart';
 
+const List<VisualEditorMode> _drawModes = <VisualEditorMode>[
+  VisualEditorMode.river,
+  VisualEditorMode.treeline,
+  VisualEditorMode.road,
+  VisualEditorMode.building,
+];
+
 class VisualRangeCardScreen extends GetView<VisualRangeCardController> {
   const VisualRangeCardScreen({super.key, this.showBottomNav = true});
 
@@ -31,6 +38,9 @@ class VisualRangeCardScreen extends GetView<VisualRangeCardController> {
         }
         final renderCard = card.copyWith(
           targetMarkers: controller.targetMarkers,
+        );
+        final draftTerrainPoints = controller.draftTerrainPoints.toList(
+          growable: false,
         );
         return SingleChildScrollView(
           physics: controller.isDrawModeEnabled.value
@@ -85,7 +95,7 @@ class VisualRangeCardScreen extends GetView<VisualRangeCardController> {
                             crossAxisAlignment: CrossAxisAlignment.start,
                             children: [
                               Text(
-                                'DRAW MODE',
+                                'DRAW',
                                 style: Theme.of(context).textTheme.titleSmall
                                     ?.copyWith(
                                       color: AppColors.textMuted,
@@ -95,8 +105,8 @@ class VisualRangeCardScreen extends GetView<VisualRangeCardController> {
                               const SizedBox(height: 2),
                               Text(
                                 controller.isDrawModeEnabled.value
-                                    ? 'Canvas interaction is active and page scrolling is locked.'
-                                    : 'Enable to draw on the plot without scrolling the screen.',
+                                    ? 'Drawing is active and page scrolling is locked.'
+                                    : 'Enable drawing to paint river, treeline, road, or building.',
                                 style: Theme.of(context).textTheme.bodySmall
                                     ?.copyWith(color: AppColors.textMuted),
                               ),
@@ -126,7 +136,7 @@ class VisualRangeCardScreen extends GetView<VisualRangeCardController> {
                           scrollDirection: Axis.horizontal,
                           child: Row(
                             spacing: AppSpacing.sm,
-                            children: VisualEditorMode.values
+                            children: _drawModes
                                 .map(
                                   (mode) => _ModeChip(
                                     mode: mode,
@@ -195,8 +205,7 @@ class VisualRangeCardScreen extends GetView<VisualRangeCardController> {
                           height: plotHeight,
                           child: VisualRangeCardCanvas(
                             card: renderCard,
-                            draftTerrainPoints: controller.draftTerrainPoints
-                                .toList(growable: false),
+                            draftTerrainPoints: draftTerrainPoints,
                             editorMode: controller.editorMode.value,
                             interactionEnabled:
                                 controller.isDrawModeEnabled.value,
@@ -205,6 +214,12 @@ class VisualRangeCardScreen extends GetView<VisualRangeCardController> {
                                 Get.find<VisualRangeCardService>(),
                             onTapDown: (localPosition, size) {
                               controller.handleTap(
+                                size: size,
+                                localPosition: localPosition,
+                              );
+                            },
+                            onPanDown: (localPosition, size) {
+                              controller.handlePanDown(
                                 size: size,
                                 localPosition: localPosition,
                               );
@@ -254,7 +269,7 @@ class VisualRangeCardScreen extends GetView<VisualRangeCardController> {
                       const EmptyStateView(
                         title: 'No terrain items',
                         description:
-                            'Choose a terrain mode and tap the plot to draw a path.',
+                            'Choose River, Treeline, Road, or Building and drag on the plot.',
                         icon: Icons.terrain_outlined,
                       )
                     else
@@ -365,14 +380,11 @@ class VisualRangeCardScreen extends GetView<VisualRangeCardController> {
   }
 
   String _instructionText(VisualRangeCardController controller) {
-    final mode = controller.editorMode.value;
     if (!controller.isDrawModeEnabled.value) {
-      return 'Enable draw mode to position range card targets or paint terrain without scrolling the page.';
+      return 'Enable drawing to paint terrain without scrolling the page.';
     }
-    if (mode == VisualEditorMode.marker) {
-      return 'Range card targets appear here automatically. Drag them to adjust placement.';
-    }
-    return 'Draw on the map — tap for points or drag to paint ${mode.label.toLowerCase()}.';
+    final mode = controller.editorMode.value;
+    return 'Draw anywhere on the visual card — tap for points or drag to paint ${mode.label.toLowerCase()}.';
   }
 }
 

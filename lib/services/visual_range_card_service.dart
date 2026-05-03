@@ -16,6 +16,13 @@ class VisualRangeCardService extends GetxService {
   double plotRadius(Size size) =>
       math.min(size.width / 2 - 18, size.height - 26);
 
+  bool isInsideCanvas({required Offset localPosition, required Size size}) {
+    return localPosition.dx >= 0 &&
+        localPosition.dx <= size.width &&
+        localPosition.dy >= 0 &&
+        localPosition.dy <= size.height;
+  }
+
   bool isInsidePlot({required Offset localPosition, required Size size}) {
     final center = plotCenter(size);
     final radius = plotRadius(size);

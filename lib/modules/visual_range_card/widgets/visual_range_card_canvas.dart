@@ -38,6 +38,7 @@ class VisualRangeCardCanvas extends StatelessWidget {
     required this.maxDistanceMeters,
     required this.visualRangeCardService,
     required this.onTapDown,
+    required this.onPanDown,
     required this.onPanStart,
     required this.onPanUpdate,
     required this.onPanEnd,
@@ -50,6 +51,7 @@ class VisualRangeCardCanvas extends StatelessWidget {
   final double maxDistanceMeters;
   final VisualRangeCardService visualRangeCardService;
   final VisualCanvasPositionCallback onTapDown;
+  final VisualCanvasPositionCallback onPanDown;
   final VisualCanvasPositionCallback onPanStart;
   final VisualCanvasPositionCallback onPanUpdate;
   final VoidCallback onPanEnd;
@@ -70,6 +72,9 @@ class VisualRangeCardCanvas extends StatelessWidget {
               behavior: HitTestBehavior.opaque,
               onTapUp: interactionEnabled
                   ? (details) => onTapDown(details.localPosition, size)
+                  : null,
+              onPanDown: interactionEnabled
+                  ? (details) => onPanDown(details.localPosition, size)
                   : null,
               onPanStart: interactionEnabled
                   ? (details) => onPanStart(details.localPosition, size)

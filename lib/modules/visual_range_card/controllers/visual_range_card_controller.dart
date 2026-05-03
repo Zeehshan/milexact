@@ -23,7 +23,7 @@ class VisualRangeCardController extends GetxController {
   final VisualRangeCardService _visualRangeCardService;
 
   final currentCard = Rxn<VisualRangeCardState>();
-  final editorMode = VisualEditorMode.marker.obs;
+  final editorMode = VisualEditorMode.river.obs;
   final isDrawModeEnabled = false.obs;
   final draftTerrainPoints = <VisualPoint>[].obs;
   final draggingMarkerId = RxnString();
@@ -98,6 +98,9 @@ class VisualRangeCardController extends GetxController {
 
   void setDrawModeEnabled(bool isEnabled) {
     isDrawModeEnabled.value = isEnabled;
+    if (isEnabled && !editorMode.value.isTerrain) {
+      editorMode.value = VisualEditorMode.river;
+    }
     if (!isEnabled) {
       draggingMarkerId.value = null;
       draggingMarkerPreview.value = null;
@@ -124,17 +127,43 @@ class VisualRangeCardController extends GetxController {
     if (_isTerrainDrawing) {
       return;
     }
-    if (!_visualRangeCardService.isInsidePlot(
+
+    if (editorMode.value == VisualEditorMode.marker) {
+      if (!_visualRangeCardService.isInsidePlot(
+        localPosition: localPosition,
+        size: size,
+      )) {
+        return;
+      }
+      return;
+    }
+
+    if (!_visualRangeCardService.isInsideCanvas(
       localPosition: localPosition,
       size: size,
     )) {
       return;
     }
 
-    if (editorMode.value == VisualEditorMode.marker) {
+    _appendTerrainPoint(size: size, localPosition: localPosition);
+  }
+
+  void handlePanDown({required Size size, required Offset localPosition}) {
+    if (!isDrawModeEnabled.value || !editorMode.value.isTerrain) {
+      return;
+    }
+    if (!_visualRangeCardService.isInsideCanvas(
+      localPosition: localPosition,
+      size: size,
+    )) {
       return;
     }
 
+    _snapshot();
+    _isTerrainDrawing = true;
+    draggingMarkerPreview.value = null;
+    draftTerrainPoints.clear();
+    draftTerrainPoints.refresh();
     _appendTerrainPoint(size: size, localPosition: localPosition);
   }
 
@@ -142,19 +171,29 @@ class VisualRangeCardController extends GetxController {
     if (!isDrawModeEnabled.value) {
       return;
     }
-    if (!_visualRangeCardService.isInsidePlot(
-      localPosition: localPosition,
-      size: size,
-    )) {
-      return;
-    }
 
     if (editorMode.value.isTerrain) {
+      if (_isTerrainDrawing) {
+        return;
+      }
+      if (!_visualRangeCardService.isInsideCanvas(
+        localPosition: localPosition,
+        size: size,
+      )) {
+        return;
+      }
       _snapshot();
       _isTerrainDrawing = true;
       draggingMarkerPreview.value = null;
       draftTerrainPoints.clear();
       _appendTerrainPoint(size: size, localPosition: localPosition);
+      return;
+    }
+
+    if (!_visualRangeCardService.isInsidePlot(
+      localPosition: localPosition,
+      size: size,
+    )) {
       return;
     }
 
@@ -178,7 +217,7 @@ class VisualRangeCardController extends GetxController {
     }
     if (editorMode.value.isTerrain) {
       if (!_isTerrainDrawing ||
-          !_visualRangeCardService.isInsidePlot(
+          !_visualRangeCardService.isInsideCanvas(
             localPosition: localPosition,
             size: size,
           )) {
@@ -233,6 +272,7 @@ class VisualRangeCardController extends GetxController {
         _commitTerrain(shouldSnapshot: false);
       } else {
         draftTerrainPoints.clear();
+        draftTerrainPoints.refresh();
       }
       return;
     }
@@ -295,6 +335,7 @@ class VisualRangeCardController extends GetxController {
       updatedAt: DateTime.now(),
     );
     draftTerrainPoints.clear();
+    draftTerrainPoints.refresh();
   }
 
   void renameMarker({
@@ -389,6 +430,7 @@ class VisualRangeCardController extends GetxController {
   void undo() {
     if (draftTerrainPoints.isNotEmpty) {
       draftTerrainPoints.removeLast();
+      draftTerrainPoints.refresh();
       return;
     }
 
@@ -407,6 +449,7 @@ class VisualRangeCardController extends GetxController {
 
     _snapshot();
     draftTerrainPoints.clear();
+    draftTerrainPoints.refresh();
     currentCard.value = card.copyWith(
       targetMarkers: const <TargetMarker>[],
       terrainItems: const <TerrainItem>[],
@@ -564,7 +607,7 @@ class VisualRangeCardController extends GetxController {
         point: draftTerrainPoints.last,
         size: size,
       );
-      if ((lastOffset - localPosition).distance < 8) {
+      if ((lastOffset - localPosition).distance < 2) {
         return;
       }
     }
@@ -575,6 +618,7 @@ class VisualRangeCardController extends GetxController {
         size: size,
       ),
     );
+    draftTerrainPoints.refresh();
   }
 
   VisualRangeCardState _blankCard() {
