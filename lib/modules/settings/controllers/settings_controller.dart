@@ -1,8 +1,8 @@
 import 'package:get/get.dart';
 import 'package:milexact/data/models/app_settings.dart';
-import 'package:milexact/data/models/auth_user.dart';
 import 'package:milexact/data/models/enums.dart';
 import 'package:milexact/data/repositories/settings_repository.dart';
+import 'package:milexact/domain/auth/auth.dart';
 import 'package:milexact/services/auth_service.dart';
 
 class SettingsController extends GetxController {
@@ -12,7 +12,7 @@ class SettingsController extends GetxController {
   final AuthService _authService;
 
   Rx<AppSettings> get settings => _repository.settings;
-  Rxn<AuthUser> get currentUser => _authService.currentUser;
+  Rxn<AppUser> get currentUser => _authService.currentUser;
 
   Future<void> updateDisplayPreference(
     DistanceDisplayPreference preference,

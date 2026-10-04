@@ -36,12 +36,16 @@ class SettingsScreen extends GetView<SettingsController> {
                     Text('Account', style: theme.textTheme.titleLarge),
                     const SizedBox(height: AppSpacing.sm),
                     Text(
-                      currentUser?.email ?? 'No local account session',
+                      currentUser?.email ?? 'No active account session',
                       style: theme.textTheme.bodyLarge,
                     ),
                     const SizedBox(height: AppSpacing.sm),
                     Text(
-                      'Email/password sessions are stored locally. Google and Apple sign-in are wired for custom API exchange when your backend URL is configured.',
+                      currentUser == null
+                          ? 'Firebase Authentication is enabled for email/password, Google, and Apple sign-in.'
+                          : currentUser.emailVerified
+                          ? 'This account is authenticated with Firebase and synced to Firestore for future profile use.'
+                          : 'This account still needs email verification before full app access is granted.',
                       style: theme.textTheme.bodySmall,
                     ),
                     const SizedBox(height: AppSpacing.md),
@@ -53,7 +57,7 @@ class SettingsScreen extends GetView<SettingsController> {
                                 AlertDialog(
                                   title: const Text('Sign Out'),
                                   content: const Text(
-                                    'Sign out from the current local session?',
+                                    'Sign out from the current account?',
                                   ),
                                   actions: [
                                     TextButton(

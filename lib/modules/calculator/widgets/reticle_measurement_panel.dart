@@ -1,7 +1,6 @@
 import 'dart:math' as math;
 
 import 'package:flutter/material.dart';
-import 'package:milexact/app/theme/app_colors.dart';
 import 'package:milexact/data/models/enums.dart';
 
 const double _reticleInnerRadiusFactor = 0.40;
@@ -9,8 +8,15 @@ const double _reticleOuterRadiusMultiplier = 1.15;
 const double _guideGrabThreshold = 18.0;
 const double _minReticleZoom = 0.55;
 const double _maxReticleZoom = 3.0;
+const Color _reticleCanvasColor = Color(0xFF020202);
+const Color _reticleBorderColor = Color(0xFF141414);
+const Color _reticleLineColor = Color(0xFFF2F2EF);
+const Color _reticleMinorLineColor = Color(0xFFD8D8D4);
+const Color _reticleLabelColor = Color(0xFFFF4A43);
+const Color _reticleMeasurementColor = Color(0xFFF0D21B);
+const Color _reticleCenterDotColor = Color(0xFFFF453A);
 
-enum _GuideDragTarget { baseline, measurement }
+enum _GuideDragTarget { measurement }
 
 class ReticleMeasurementPanel extends StatefulWidget {
   const ReticleMeasurementPanel({
@@ -142,48 +148,33 @@ class _ReticleMeasurementPanelState extends State<ReticleMeasurementPanel>
         return SizedBox(
           height: size.height,
           width: double.infinity,
-          child: Stack(
-            children: [
-              Positioned(
-                top: 6,
-                right: 8,
-                child: _ReticleGuideLegend(
-                  referenceDimension: widget.referenceDimension,
-                  reticleProfile: widget.reticleProfile,
-                  reticleType: widget.reticleType,
-                ),
+          child: Listener(
+            behavior: HitTestBehavior.opaque,
+            onPointerDown: widget.interactionEnabled
+                ? (event) => _handlePointerDown(event, size)
+                : null,
+            onPointerMove: widget.interactionEnabled
+                ? (event) => _handlePointerMove(event, size)
+                : null,
+            onPointerUp: widget.interactionEnabled ? _handlePointerUp : null,
+            onPointerCancel: widget.interactionEnabled
+                ? _handlePointerCancel
+                : null,
+            child: CustomPaint(
+              size: size,
+              painter: ReticleMeasurementPainter(
+                referenceDimension: widget.referenceDimension,
+                baselineFraction: _displayBaselineFraction,
+                measurementFraction: _displayMeasurementFraction,
+                reticleType: widget.reticleType,
+                reticleProfile: widget.reticleProfile,
+                readingLabel: widget.readingLabel,
+                lineThickness: widget.lineThickness,
+                overlayOpacity: widget.overlayOpacity,
+                zoomFactor: widget.zoomFactor,
+                measurementModeEnabled: widget.interactionEnabled,
               ),
-              Listener(
-                behavior: HitTestBehavior.opaque,
-                onPointerDown: widget.interactionEnabled
-                    ? (event) => _handlePointerDown(event, size)
-                    : null,
-                onPointerMove: widget.interactionEnabled
-                    ? (event) => _handlePointerMove(event, size)
-                    : null,
-                onPointerUp: widget.interactionEnabled
-                    ? _handlePointerUp
-                    : null,
-                onPointerCancel: widget.interactionEnabled
-                    ? _handlePointerCancel
-                    : null,
-                child: CustomPaint(
-                  size: size,
-                  painter: ReticleMeasurementPainter(
-                    referenceDimension: widget.referenceDimension,
-                    baselineFraction: _displayBaselineFraction,
-                    measurementFraction: _displayMeasurementFraction,
-                    reticleType: widget.reticleType,
-                    reticleProfile: widget.reticleProfile,
-                    readingLabel: widget.readingLabel,
-                    lineThickness: widget.lineThickness,
-                    overlayOpacity: widget.overlayOpacity,
-                    zoomFactor: widget.zoomFactor,
-                    measurementModeEnabled: widget.interactionEnabled,
-                  ),
-                ),
-              ),
-            ],
+            ),
           ),
         );
       },
@@ -205,11 +196,8 @@ class _ReticleMeasurementPanelState extends State<ReticleMeasurementPanel>
       case _GuideDragTarget.measurement:
         widget.onInteractionUpdate(localPosition, size);
         break;
-      case _GuideDragTarget.baseline:
-        widget.onBaselineUpdate(localPosition, size);
-        break;
       default:
-        widget.onInteractionStart(localPosition, size);
+        widget.onInteractionUpdate(localPosition, size);
         _activeDragTarget = _GuideDragTarget.measurement;
         break;
     }
@@ -225,9 +213,6 @@ class _ReticleMeasurementPanelState extends State<ReticleMeasurementPanel>
       size,
     );
     switch (_activeDragTarget) {
-      case _GuideDragTarget.baseline:
-        widget.onBaselineUpdate(localPosition, size);
-        break;
       case _GuideDragTarget.measurement:
         widget.onInteractionUpdate(localPosition, size);
         break;
@@ -258,12 +243,6 @@ class _ReticleMeasurementPanelState extends State<ReticleMeasurementPanel>
   }
 
   _GuideDragTarget? _resolveDragTarget(Offset localPosition, Size size) {
-    final center = Offset(size.width / 2, size.height / 2);
-    final scopeRadius =
-        size.shortestSide *
-        _reticleInnerRadiusFactor *
-        _reticleOuterRadiusMultiplier;
-    final baselinePosition = _axisPositionPx(_displayBaselineFraction, size);
     final measurementPosition = _axisPositionPx(
       _displayMeasurementFraction,
       size,
@@ -280,31 +259,6 @@ class _ReticleMeasurementPanelState extends State<ReticleMeasurementPanel>
     if (hasMeasurement &&
         (touchPosition - measurementPosition).abs() <= _guideGrabThreshold) {
       return _GuideDragTarget.measurement;
-    }
-
-    final startIcon = _baselineActionIconPosition(
-      size: size,
-      center: center,
-      scopeRadius: scopeRadius,
-      useTargetSide: false,
-    );
-    final targetIcon = _baselineActionIconPosition(
-      size: size,
-      center: center,
-      scopeRadius: scopeRadius,
-      useTargetSide: true,
-    );
-
-    if ((localPosition - targetIcon).distance <= 28) {
-      return _GuideDragTarget.measurement;
-    }
-
-    if ((localPosition - startIcon).distance <= 28) {
-      return _GuideDragTarget.baseline;
-    }
-
-    if ((touchPosition - baselinePosition).abs() <= _guideGrabThreshold) {
-      return _GuideDragTarget.baseline;
     }
 
     return null;
@@ -330,61 +284,6 @@ class _ReticleMeasurementPanelState extends State<ReticleMeasurementPanel>
     return center + (delta / zoomFactor);
   }
 
-  Offset _baselineActionIconPosition({
-    required Size size,
-    required Offset center,
-    required double scopeRadius,
-    required bool useTargetSide,
-  }) {
-    if (widget.referenceDimension == TargetDimensionType.height) {
-      final baselineY = size.height * _displayBaselineFraction;
-      final span = _horizontalHalfSpanForCircle(
-        center: center,
-        radius: scopeRadius,
-        y: baselineY,
-      );
-      return Offset(
-        useTargetSide ? center.dx + span - 28 : center.dx - span + 28,
-        baselineY,
-      );
-    }
-
-    final baselineX = size.width * _displayBaselineFraction;
-    final span = _verticalHalfSpanForCircle(
-      center: center,
-      radius: scopeRadius,
-      x: baselineX,
-    );
-    return Offset(
-      baselineX,
-      useTargetSide ? center.dy + span - 28 : center.dy - span + 28,
-    );
-  }
-
-  double _horizontalHalfSpanForCircle({
-    required Offset center,
-    required double radius,
-    required double y,
-  }) {
-    final dy = (y - center.dy).abs();
-    if (dy >= radius) {
-      return 0;
-    }
-    return math.sqrt((radius * radius) - (dy * dy));
-  }
-
-  double _verticalHalfSpanForCircle({
-    required Offset center,
-    required double radius,
-    required double x,
-  }) {
-    final dx = (x - center.dx).abs();
-    if (dx >= radius) {
-      return 0;
-    }
-    return math.sqrt((radius * radius) - (dx * dx));
-  }
-
   Offset _clampInteractionToScope(Offset localPosition, Size size) {
     final center = Offset(size.width / 2, size.height / 2);
     final scopeRadius =
@@ -405,61 +304,6 @@ class _ReticleMeasurementPanelState extends State<ReticleMeasurementPanel>
     return Offset(
       localPosition.dx.clamp(center.dx - scopeRadius, center.dx + scopeRadius),
       localPosition.dy,
-    );
-  }
-}
-
-class _ReticleGuideLegend extends StatelessWidget {
-  const _ReticleGuideLegend({
-    required this.referenceDimension,
-    required this.reticleProfile,
-    required this.reticleType,
-  });
-
-  final TargetDimensionType referenceDimension;
-  final ReticleProfile reticleProfile;
-  final ReticleType reticleType;
-
-  @override
-  Widget build(BuildContext context) {
-    final heightActive = referenceDimension == TargetDimensionType.height;
-    final widthActive = referenceDimension == TargetDimensionType.width;
-
-    return Column(
-      crossAxisAlignment: CrossAxisAlignment.start,
-      mainAxisSize: MainAxisSize.min,
-      children: [
-        _LegendLine(
-          text: '↕ • ${reticleProfile.heightGuide} ${reticleType.label}',
-          active: heightActive,
-        ),
-        const SizedBox(height: 3),
-        _LegendLine(
-          text: '↔ • ${reticleProfile.widthGuide} ${reticleType.label}',
-          active: widthActive,
-        ),
-      ],
-    );
-  }
-}
-
-class _LegendLine extends StatelessWidget {
-  const _LegendLine({required this.text, required this.active});
-
-  final String text;
-  final bool active;
-
-  @override
-  Widget build(BuildContext context) {
-    return Text(
-      text,
-      maxLines: 1,
-      overflow: TextOverflow.ellipsis,
-      style: TextStyle(
-        color: active ? AppColors.accent : AppColors.textMuted,
-        fontSize: 11,
-        fontWeight: active ? FontWeight.w700 : FontWeight.w600,
-      ),
     );
   }
 }
@@ -494,31 +338,31 @@ class ReticleMeasurementPainter extends CustomPainter {
     final center = Offset(size.width / 2, size.height / 2);
     final radius = size.shortestSide * _reticleInnerRadiusFactor;
     final scopeRadius = radius * _reticleOuterRadiusMultiplier;
-    final normalizedOpacity = overlayOpacity.clamp(0.35, 1.0);
+    final reticleVisibility = overlayOpacity.clamp(0.2, 1.0);
+    const measurementOpacity = 0.96;
+    final horizontalExtent = (size.width / 2) - 22;
+    final verticalExtent = (size.height / 2) - 18;
     final borderPaint = Paint()
-      ..color = AppColors.border
+      ..color = _reticleBorderColor
       ..style = PaintingStyle.stroke
       ..strokeWidth = 1.2;
-    final ringPaint = Paint()
-      ..color = AppColors.primary.withValues(alpha: 0.16)
-      ..style = PaintingStyle.stroke
-      ..strokeWidth = 1.2;
+    final fillPaint = Paint()
+      ..color = _reticleCanvasColor
+      ..style = PaintingStyle.fill;
     final reticlePaint = Paint()
-      ..color = AppColors.primary.withValues(alpha: 0.82)
+      ..color = _reticleLineColor.withValues(alpha: reticleVisibility * 0.96)
+      ..style = PaintingStyle.stroke
+      ..strokeWidth = 1.5;
+    final accentPaint = Paint()
+      ..color = _reticleMeasurementColor.withValues(alpha: measurementOpacity)
       ..style = PaintingStyle.stroke
       ..strokeWidth = 1.2;
-    final accentPaint = Paint()
-      ..color = AppColors.accent.withValues(alpha: normalizedOpacity)
-      ..style = PaintingStyle.stroke
-      ..strokeWidth = 0.8;
-    final tickPaint = Paint()
-      ..color = AppColors.primary.withValues(alpha: 0.52)
-      ..strokeWidth = 1;
 
     final rect = RRect.fromRectAndRadius(
       Offset.zero & size,
       const Radius.circular(18),
     );
+    canvas.drawRRect(rect, fillPaint);
     canvas.drawRRect(rect, borderPaint);
 
     canvas.save();
@@ -528,34 +372,66 @@ class ReticleMeasurementPainter extends CustomPainter {
     canvas.scale(normalizedZoom, normalizedZoom);
     canvas.translate(-center.dx, -center.dy);
 
-    canvas.drawCircle(center, scopeRadius, ringPaint);
-    canvas.drawCircle(center, radius, ringPaint);
-
     canvas.drawLine(
-      Offset(center.dx, center.dy - scopeRadius),
-      Offset(center.dx, center.dy + scopeRadius),
+      Offset(center.dx, center.dy - verticalExtent),
+      Offset(center.dx, center.dy + verticalExtent),
       reticlePaint,
     );
     canvas.drawLine(
-      Offset(center.dx - scopeRadius, center.dy),
-      Offset(center.dx + scopeRadius, center.dy),
+      Offset(center.dx - horizontalExtent, center.dy),
+      Offset(center.dx + horizontalExtent, center.dy),
       reticlePaint,
     );
 
     switch (reticleProfile) {
       case ReticleProfile.milDot:
         _drawMilDots(canvas, center, radius, reticlePaint);
+      case ReticleProfile.milHash05:
+        _drawMilHashCrosshair(
+          canvas,
+          center,
+          radius,
+          minorTicksPerMil: 2,
+          majorHalfLength: 14,
+          minorHalfLength: 5,
+          majorStrokeWidth: 1.6,
+          minorStrokeWidth: 1.0,
+          centerDotRadius: 3.0,
+        );
+      case ReticleProfile.milHash02:
+        _drawMilHashCrosshair(
+          canvas,
+          center,
+          radius,
+          minorTicksPerMil: 5,
+          majorHalfLength: 14,
+          minorHalfLength: 4,
+          majorStrokeWidth: 1.6,
+          minorStrokeWidth: 1.05,
+          centerDotRadius: 3.0,
+        );
       case ReticleProfile.christmasTree:
-        _drawStandardTicks(canvas, center, tickPaint);
-        _drawChristmasTree(canvas, size, center, tickPaint);
+        _drawMilHashCrosshair(
+          canvas,
+          center,
+          radius,
+          minorTicksPerMil: 5,
+          majorHalfLength: 8,
+          minorHalfLength: 4,
+          majorStrokeWidth: 1.6,
+          minorStrokeWidth: 1.05,
+          centerDotRadius: 3.0,
+        );
+        _drawChristmasTree(canvas, size, center);
       case ReticleProfile.duplex:
         _drawDuplex(canvas, size, center, reticlePaint);
-      case ReticleProfile.simpleCrosshair:
-        _drawSimpleCrosshair(canvas, center, radius, tickPaint, reticlePaint);
     }
 
-    if (reticleProfile == ReticleProfile.simpleCrosshair) {
-      _drawSimpleCrosshairLabels(canvas, center, radius);
+    if (reticleProfile == ReticleProfile.christmasTree) {
+      _drawChristmasTreeLabels(canvas, center, radius);
+    } else if (reticleProfile == ReticleProfile.milHash05 ||
+        reticleProfile == ReticleProfile.milHash02) {
+      _drawMilHashLabels(canvas, center, radius);
     } else if (reticleProfile != ReticleProfile.duplex) {
       _drawAxisLabels(canvas, size, center, radius);
     }
@@ -604,280 +480,69 @@ class ReticleMeasurementPainter extends CustomPainter {
     required Paint accentPaint,
   }) {
     final deltaFraction = (measurementFraction - baselineFraction).abs();
-    final normalizedThickness = lineThickness.clamp(0.8, 3.0);
-    final normalizedOpacity = overlayOpacity.clamp(0.35, 1.0);
-    final guideAlpha = (0.4 + (normalizedOpacity * 0.6)).clamp(0.0, 1.0);
-    final guideThickness = 0.8;
-    final connectorThickness = (lineThickness * 4.8).clamp(3.0, 12.0);
-    final handleWidth = (16 + (normalizedThickness * 4)).clamp(20.0, 30.0);
-    final handleHeight = (5 + (normalizedThickness * 1.6)).clamp(7.0, 12.0);
-    final glowWidth = handleWidth + 4;
-    final glowHeight = handleHeight + 4;
-    final targetLabelColor = AppColors.accent.withValues(alpha: guideAlpha);
+    const normalizedOpacity = 0.96;
+    const guideAlpha = 0.92;
     final dashedPaint = Paint()
-      ..color = AppColors.primary.withValues(alpha: guideAlpha)
+      ..color = _reticleMeasurementColor.withValues(alpha: guideAlpha)
       ..style = PaintingStyle.stroke
-      ..strokeWidth = guideThickness;
+      ..strokeWidth = 1.4;
     final measurementGuidePaint = Paint()
-      ..color = AppColors.accent.withValues(alpha: guideAlpha)
+      ..color = _reticleMeasurementColor.withValues(alpha: guideAlpha)
       ..style = PaintingStyle.stroke
-      ..strokeWidth = guideThickness;
+      ..strokeWidth = 1.4;
     final connectorPaint = Paint()
-      ..color = AppColors.accent.withValues(alpha: normalizedOpacity)
+      ..color = _reticleMeasurementColor.withValues(alpha: normalizedOpacity)
       ..style = PaintingStyle.stroke
-      ..strokeWidth = connectorThickness
-      ..strokeCap = StrokeCap.square;
+      ..strokeWidth = (lineThickness * 1.25).clamp(1.4, 3.2)
+      ..strokeCap = StrokeCap.butt;
     final hasMeasurement = deltaFraction > 0.001 && readingLabel.isNotEmpty;
-    final measurementHandlePaint = Paint()
-      ..color = AppColors.accent
+    final endpointPaint = Paint()
+      ..color = _reticleMeasurementColor.withValues(alpha: normalizedOpacity)
       ..style = PaintingStyle.fill;
-
-    final baselineHalfSpan = _horizontalHalfSpanForCircle(
-      center: center,
-      radius: scopeRadius,
-      y: baselineY,
-    );
-    final measurementHalfSpan = _horizontalHalfSpanForCircle(
-      center: center,
-      radius: scopeRadius,
-      y: measurementY,
-    );
+    final connectorX = size.width - 18;
+    final baselineStart = Offset(14, baselineY);
+    final baselineEnd = Offset(size.width - 14, baselineY);
+    final measurementStart = Offset(14, measurementY);
+    final measurementEnd = Offset(size.width - 14, measurementY);
 
     _drawDashedLine(
       canvas: canvas,
-      start: Offset(center.dx - baselineHalfSpan, baselineY),
-      end: Offset(center.dx + baselineHalfSpan, baselineY),
+      start: baselineStart,
+      end: baselineEnd,
       paint: dashedPaint,
       dashLength: 10,
       gapLength: 6,
     );
 
-    _drawBaselineActionIcon(
+    _paintText(
       canvas,
-      center: Offset(center.dx - baselineHalfSpan + 28, baselineY),
-      icon: Icons.touch_app_rounded,
-      color: AppColors.primary,
-      tooltipBackground: AppColors.background,
-    );
-    _drawBaselineActionIcon(
-      canvas,
-      center: Offset(center.dx + baselineHalfSpan - 28, baselineY),
-      icon: Icons.my_location_rounded,
-      color: AppColors.accent,
-      tooltipBackground: AppColors.background,
+      text: '0',
+      offset: Offset(8, baselineY - 18),
+      style: TextStyle(
+        color: _reticleMeasurementColor.withValues(alpha: guideAlpha),
+        fontSize: 12,
+        fontWeight: FontWeight.w700,
+      ),
     );
 
     if (hasMeasurement) {
-      final baselineHandleGlowPaint = Paint()
-        ..color = AppColors.primary.withValues(
-          alpha: 0.06 + (normalizedOpacity * 0.14),
-        )
-        ..style = PaintingStyle.fill;
-
-      canvas.drawRRect(
-        RRect.fromRectAndRadius(
-          Rect.fromCenter(
-            center: Offset(center.dx, baselineY),
-            width: glowWidth,
-            height: glowHeight,
-          ),
-          const Radius.circular(3),
-        ),
-        baselineHandleGlowPaint,
-      );
-
-      final handlePaint = Paint()
-        ..color = AppColors.primary.withValues(alpha: guideAlpha)
-        ..style = PaintingStyle.fill;
-
-      canvas.drawRRect(
-        RRect.fromRectAndRadius(
-          Rect.fromCenter(
-            center: Offset(center.dx, baselineY),
-            width: handleWidth,
-            height: handleHeight,
-          ),
-          const Radius.circular(2),
-        ),
-        handlePaint,
-      );
-
-      final arrowPaint = Paint()
-        ..color = AppColors.primary.withValues(
-          alpha: 0.35 + (normalizedOpacity * 0.45),
-        )
-        ..strokeWidth = (normalizedThickness * 0.9).clamp(1.0, 2.2)
-        ..style = PaintingStyle.stroke;
-
+      canvas.drawLine(measurementStart, measurementEnd, measurementGuidePaint);
       canvas.drawLine(
-        Offset(center.dx - 6, baselineY - 1),
-        Offset(center.dx - 10, baselineY),
-        arrowPaint,
-      );
-      canvas.drawLine(
-        Offset(center.dx - 6, baselineY + 1),
-        Offset(center.dx - 10, baselineY),
-        arrowPaint,
-      );
-      canvas.drawLine(
-        Offset(center.dx + 6, baselineY - 1),
-        Offset(center.dx + 10, baselineY),
-        arrowPaint,
-      );
-      canvas.drawLine(
-        Offset(center.dx + 6, baselineY + 1),
-        Offset(center.dx + 10, baselineY),
-        arrowPaint,
-      );
-
-      canvas.drawLine(
-        Offset(center.dx - measurementHalfSpan, measurementY),
-        Offset(center.dx + measurementHalfSpan, measurementY),
-        measurementGuidePaint,
-      );
-      canvas.drawLine(
-        Offset(center.dx, measurementY),
-        Offset(center.dx, baselineY),
+        Offset(connectorX, measurementY),
+        Offset(connectorX, baselineY),
         connectorPaint,
       );
-
-      // Enhanced measurement handle with glow effect
-      final measurementHandleGlowPaint = Paint()
-        ..color = AppColors.accent.withValues(
-          alpha: 0.08 + (normalizedOpacity * 0.12),
-        )
-        ..style = PaintingStyle.fill;
-      canvas.drawRRect(
-        RRect.fromRectAndRadius(
-          Rect.fromCenter(
-            center: Offset(center.dx, measurementY),
-            width: glowWidth,
-            height: glowHeight,
-          ),
-          const Radius.circular(4),
-        ),
-        measurementHandleGlowPaint,
-      );
-
-      canvas.drawRRect(
-        RRect.fromRectAndRadius(
-          Rect.fromCenter(
-            center: Offset(center.dx, measurementY),
-            width: handleWidth,
-            height: handleHeight,
-          ),
-          const Radius.circular(3),
-        ),
-        measurementHandlePaint,
-      );
-
-      // Draw arrow indicators on measurement handle
-      final targetArrowPaint = Paint()
-        ..color = AppColors.accent.withValues(
-          alpha: 0.4 + (normalizedOpacity * 0.4),
-        )
-        ..strokeWidth = (normalizedThickness * 0.95).clamp(1.0, 2.3)
-        ..style = PaintingStyle.stroke;
-
-      // Up/Down arrows to indicate dragging
-      canvas.drawLine(
-        Offset(center.dx - 1, measurementY - 4),
-        Offset(center.dx - 1, measurementY + 4),
-        targetArrowPaint,
-      );
-      canvas.drawLine(
-        Offset(center.dx + 1, measurementY - 4),
-        Offset(center.dx + 1, measurementY + 4),
-        targetArrowPaint,
-      );
-
-      // decorative dots
-      canvas.drawCircle(
-        Offset(center.dx - 1, measurementY - 5),
-        1.2,
-        targetArrowPaint,
-      );
-      canvas.drawCircle(
-        Offset(center.dx + 1, measurementY - 5),
-        1.2,
-        targetArrowPaint,
-      );
-      canvas.drawCircle(
-        Offset(center.dx - 1, measurementY + 5),
-        1.2,
-        targetArrowPaint,
-      );
-      canvas.drawCircle(
-        Offset(center.dx + 1, measurementY + 5),
-        1.2,
-        targetArrowPaint,
-      );
-
-      canvas.drawLine(
-        Offset(center.dx - 32, center.dy - 14),
-        Offset(center.dx + 10, center.dy - 14),
-        measurementGuidePaint,
-      );
-      canvas.drawLine(
-        Offset(center.dx - 32, center.dy + 14),
-        Offset(center.dx + 10, center.dy + 14),
-        measurementGuidePaint,
-      );
-
-      // Label for measurement target
-      // _paintText(
-      //   canvas,
-      //   text: 'TARGET',
-      //   offset: Offset(center.dx - 18, measurementY - 12),
-      //   style: TextStyle(
-      //     color: targetLabelColor,
-      //     fontSize: 8,
-      //     fontWeight: FontWeight.w600,
-      //   ),
-      // );
-
+      canvas.drawCircle(Offset(connectorX, baselineY), 4, endpointPaint);
+      canvas.drawCircle(Offset(connectorX, measurementY), 4, endpointPaint);
       _paintText(
         canvas,
         text: '$readingLabel ${reticleType.label}',
-        offset: Offset(center.dx + 38, center.dy - 8),
+        offset: Offset(connectorX - 96, measurementY + 8),
         style: TextStyle(
-          color: targetLabelColor,
-          fontSize: 10,
+          color: _reticleMeasurementColor.withValues(alpha: normalizedOpacity),
+          fontSize: 16,
           fontWeight: FontWeight.w700,
         ),
-      );
-
-      final badgeText = '$readingLabel ${reticleType.label}';
-      final badgePainter = _textPainter(
-        badgeText,
-        const TextStyle(
-          color: AppColors.accent,
-          fontSize: 18,
-          fontWeight: FontWeight.w700,
-        ),
-      );
-      final padding = const EdgeInsets.symmetric(horizontal: 12, vertical: 8);
-      final badgeRect = RRect.fromRectAndRadius(
-        Rect.fromLTWH(
-          center.dx + 26,
-          measurementY - 24,
-          badgePainter.width + padding.horizontal,
-          badgePainter.height + padding.vertical,
-        ),
-        const Radius.circular(12),
-      );
-      final badgeFillPaint = Paint()
-        ..color = AppColors.background.withValues(alpha: 0.88)
-        ..style = PaintingStyle.fill;
-      final badgeBorderPaint = Paint()
-        ..color = AppColors.accent.withValues(alpha: 0.24)
-        ..style = PaintingStyle.stroke
-        ..strokeWidth = 1;
-      canvas.drawRRect(badgeRect, badgeFillPaint);
-      canvas.drawRRect(badgeRect, badgeBorderPaint);
-      badgePainter.paint(
-        canvas,
-        Offset(badgeRect.left + padding.left, badgeRect.top + padding.top),
       );
     }
   }
@@ -892,313 +557,68 @@ class ReticleMeasurementPainter extends CustomPainter {
     required Paint accentPaint,
   }) {
     final deltaFraction = (measurementFraction - baselineFraction).abs();
-    final normalizedThickness = lineThickness.clamp(0.8, 3.0);
-    final normalizedOpacity = overlayOpacity.clamp(0.35, 1.0);
-    final guideAlpha = (0.4 + (normalizedOpacity * 0.6)).clamp(0.0, 1.0);
-    final guideThickness = 0.8;
-    final connectorThickness = (lineThickness * 4.8).clamp(3.0, 12.0);
-    final handleWidth = (5 + (normalizedThickness * 1.6)).clamp(7.0, 12.0);
-    final handleHeight = (16 + (normalizedThickness * 4)).clamp(20.0, 30.0);
-    final glowWidth = handleWidth + 4;
-    final glowHeight = handleHeight + 4;
-    final targetLabelColor = AppColors.accent.withValues(alpha: guideAlpha);
+    const normalizedOpacity = 0.96;
+    const guideAlpha = 0.92;
     final dashedPaint = Paint()
-      ..color = AppColors.primary.withValues(alpha: guideAlpha)
+      ..color = _reticleMeasurementColor.withValues(alpha: guideAlpha)
       ..style = PaintingStyle.stroke
-      ..strokeWidth = guideThickness;
+      ..strokeWidth = 1.4;
     final measurementGuidePaint = Paint()
-      ..color = AppColors.accent.withValues(alpha: guideAlpha)
+      ..color = _reticleMeasurementColor.withValues(alpha: guideAlpha)
       ..style = PaintingStyle.stroke
-      ..strokeWidth = guideThickness;
+      ..strokeWidth = 1.4;
     final connectorPaint = Paint()
-      ..color = AppColors.accent.withValues(alpha: normalizedOpacity)
+      ..color = _reticleMeasurementColor.withValues(alpha: normalizedOpacity)
       ..style = PaintingStyle.stroke
-      ..strokeWidth = connectorThickness
-      ..strokeCap = StrokeCap.square;
+      ..strokeWidth = (lineThickness * 1.25).clamp(1.4, 3.2)
+      ..strokeCap = StrokeCap.butt;
     final hasMeasurement = deltaFraction > 0.001 && readingLabel.isNotEmpty;
-    final measurementHandlePaint = Paint()
-      ..color = AppColors.accent
+    final endpointPaint = Paint()
+      ..color = _reticleMeasurementColor.withValues(alpha: normalizedOpacity)
       ..style = PaintingStyle.fill;
-
-    final baselineHalfSpan = _verticalHalfSpanForCircle(
-      center: center,
-      radius: scopeRadius,
-      x: baselineX,
-    );
-    final measurementHalfSpan = _verticalHalfSpanForCircle(
-      center: center,
-      radius: scopeRadius,
-      x: measurementX,
-    );
+    final baselineStart = Offset(baselineX, 14);
+    final baselineEnd = Offset(baselineX, size.height - 14);
+    final measurementStart = Offset(measurementX, 14);
+    final measurementEnd = Offset(measurementX, size.height - 14);
 
     _drawDashedLine(
       canvas: canvas,
-      start: Offset(baselineX, center.dy - baselineHalfSpan),
-      end: Offset(baselineX, center.dy + baselineHalfSpan),
+      start: baselineStart,
+      end: baselineEnd,
       paint: dashedPaint,
       dashLength: 10,
       gapLength: 6,
     );
 
-    _drawBaselineActionIcon(
+    _paintText(
       canvas,
-      center: Offset(baselineX, center.dy - baselineHalfSpan + 28),
-      icon: Icons.touch_app_rounded,
-      color: AppColors.primary,
-      tooltipBackground: AppColors.background,
-    );
-    _drawBaselineActionIcon(
-      canvas,
-      center: Offset(baselineX, center.dy + baselineHalfSpan - 28),
-      icon: Icons.my_location_rounded,
-      color: AppColors.accent,
-      tooltipBackground: AppColors.background,
+      text: '0',
+      offset: Offset(baselineX - 18, 8),
+      style: TextStyle(
+        color: _reticleMeasurementColor.withValues(alpha: guideAlpha),
+        fontSize: 12,
+        fontWeight: FontWeight.w700,
+      ),
     );
 
     if (hasMeasurement) {
-      final baselineHandleGlowPaint = Paint()
-        ..color = AppColors.primary.withValues(
-          alpha: 0.06 + (normalizedOpacity * 0.14),
-        )
-        ..style = PaintingStyle.fill;
-
-      canvas.drawRRect(
-        RRect.fromRectAndRadius(
-          Rect.fromCenter(
-            center: Offset(baselineX, center.dy),
-            width: glowWidth,
-            height: glowHeight,
-          ),
-          const Radius.circular(3),
-        ),
-        baselineHandleGlowPaint,
-      );
-
-      final handlePaint = Paint()
-        ..color = AppColors.primary.withValues(alpha: guideAlpha)
-        ..style = PaintingStyle.fill;
-
-      canvas.drawRRect(
-        RRect.fromRectAndRadius(
-          Rect.fromCenter(
-            center: Offset(baselineX, center.dy),
-            width: handleWidth,
-            height: handleHeight,
-          ),
-          const Radius.circular(2),
-        ),
-        handlePaint,
-      );
-
-      final arrowPaint = Paint()
-        ..color = AppColors.primary.withValues(
-          alpha: 0.35 + (normalizedOpacity * 0.45),
-        )
-        ..strokeWidth = (normalizedThickness * 0.9).clamp(1.0, 2.2)
-        ..style = PaintingStyle.stroke;
-
-      canvas.drawLine(
-        Offset(baselineX - 1, center.dy - 6),
-        Offset(baselineX, center.dy - 10),
-        arrowPaint,
-      );
-      canvas.drawLine(
-        Offset(baselineX + 1, center.dy - 6),
-        Offset(baselineX, center.dy - 10),
-        arrowPaint,
-      );
-      canvas.drawLine(
-        Offset(baselineX - 1, center.dy + 6),
-        Offset(baselineX, center.dy + 10),
-        arrowPaint,
-      );
-      canvas.drawLine(
-        Offset(baselineX + 1, center.dy + 6),
-        Offset(baselineX, center.dy + 10),
-        arrowPaint,
-      );
-
-      canvas.drawLine(
-        Offset(measurementX, center.dy - measurementHalfSpan),
-        Offset(measurementX, center.dy + measurementHalfSpan),
-        measurementGuidePaint,
-      );
+      canvas.drawLine(measurementStart, measurementEnd, measurementGuidePaint);
       canvas.drawLine(
         Offset(baselineX, center.dy),
         Offset(measurementX, center.dy),
         connectorPaint,
       );
-
-      // Enhanced measurement handle with glow effect
-      final measurementHandleGlowPaint = Paint()
-        ..color = AppColors.accent.withValues(
-          alpha: 0.08 + (normalizedOpacity * 0.12),
-        )
-        ..style = PaintingStyle.fill;
-      canvas.drawRRect(
-        RRect.fromRectAndRadius(
-          Rect.fromCenter(
-            center: Offset(measurementX, center.dy),
-            width: glowWidth,
-            height: glowHeight,
-          ),
-          const Radius.circular(4),
-        ),
-        measurementHandleGlowPaint,
-      );
-
-      canvas.drawRRect(
-        RRect.fromRectAndRadius(
-          Rect.fromCenter(
-            center: Offset(measurementX, center.dy),
-            width: handleWidth,
-            height: handleHeight,
-          ),
-          const Radius.circular(3),
-        ),
-        measurementHandlePaint,
-      );
-
-      // Draw arrow indicators on measurement handle
-      final targetArrowPaint = Paint()
-        ..color = AppColors.accent.withValues(
-          alpha: 0.4 + (normalizedOpacity * 0.4),
-        )
-        ..strokeWidth = (normalizedThickness * 0.95).clamp(1.0, 2.3)
-        ..style = PaintingStyle.stroke;
-
-      // Left/Right arrows to indicate dragging
-      canvas.drawLine(
-        Offset(measurementX - 4, center.dy - 1),
-        Offset(measurementX + 4, center.dy - 1),
-        targetArrowPaint,
-      );
-      canvas.drawLine(
-        Offset(measurementX - 4, center.dy + 1),
-        Offset(measurementX + 4, center.dy + 1),
-        targetArrowPaint,
-      );
-
-      // decorative dots
-      canvas.drawCircle(
-        Offset(measurementX - 5, center.dy - 1),
-        1.2,
-        targetArrowPaint,
-      );
-      canvas.drawCircle(
-        Offset(measurementX + 5, center.dy - 1),
-        1.2,
-        targetArrowPaint,
-      );
-      canvas.drawCircle(
-        Offset(measurementX - 5, center.dy + 1),
-        1.2,
-        targetArrowPaint,
-      );
-      canvas.drawCircle(
-        Offset(measurementX + 5, center.dy + 1),
-        1.2,
-        targetArrowPaint,
-      );
-
-      canvas.drawLine(
-        Offset(center.dx - 14, center.dy - 32),
-        Offset(center.dx - 14, center.dy + 10),
-        measurementGuidePaint,
-      );
-      canvas.drawLine(
-        Offset(center.dx + 14, center.dy - 32),
-        Offset(center.dx + 14, center.dy + 10),
-        measurementGuidePaint,
-      );
-
-      // Label for measurement target
-      // _paintText(
-      //   canvas,
-      //   text: 'TARGET',
-      //   offset: Offset(measurementX - 16, center.dy - 18),
-      //   style: TextStyle(
-      //     color: targetLabelColor,
-      //     fontSize: 8,
-      //     fontWeight: FontWeight.w600,
-      //   ),
-      // );
-
+      canvas.drawCircle(Offset(baselineX, center.dy), 4, endpointPaint);
+      canvas.drawCircle(Offset(measurementX, center.dy), 4, endpointPaint);
       _paintText(
         canvas,
         text: '$readingLabel ${reticleType.label}',
-        offset: Offset(center.dx - 8, center.dy - 4),
+        offset: Offset(measurementX - 48, center.dy - 28),
         style: TextStyle(
-          color: targetLabelColor,
-          fontSize: 10,
+          color: _reticleMeasurementColor.withValues(alpha: normalizedOpacity),
+          fontSize: 16,
           fontWeight: FontWeight.w700,
         ),
-      );
-
-      final badgeText = '$readingLabel ${reticleType.label}';
-      final badgePainter = _textPainter(
-        badgeText,
-        const TextStyle(
-          color: AppColors.accent,
-          fontSize: 18,
-          fontWeight: FontWeight.w700,
-        ),
-      );
-      final padding = const EdgeInsets.symmetric(horizontal: 12, vertical: 8);
-      final midpointX = (baselineX + measurementX) / 2;
-      final badgeLeft =
-          (midpointX - ((badgePainter.width + padding.horizontal) / 2)).clamp(
-            18.0,
-            size.width - badgePainter.width - padding.horizontal - 18,
-          );
-      final badgeRect = RRect.fromRectAndRadius(
-        Rect.fromLTWH(
-          badgeLeft,
-          center.dy - 18,
-          badgePainter.width + padding.horizontal,
-          badgePainter.height + padding.vertical,
-        ),
-        const Radius.circular(12),
-      );
-      final badgeFillPaint = Paint()
-        ..color = AppColors.background.withValues(alpha: 0.88)
-        ..style = PaintingStyle.fill;
-      final badgeBorderPaint = Paint()
-        ..color = AppColors.accent.withValues(alpha: 0.24)
-        ..style = PaintingStyle.stroke
-        ..strokeWidth = 1;
-      canvas.drawRRect(badgeRect, badgeFillPaint);
-      canvas.drawRRect(badgeRect, badgeBorderPaint);
-      badgePainter.paint(
-        canvas,
-        Offset(badgeRect.left + padding.left, badgeRect.top + padding.top),
-      );
-    }
-  }
-
-  void _drawStandardTicks(Canvas canvas, Offset center, Paint tickPaint) {
-    for (var step = -10; step <= 10; step++) {
-      if (step == 0) {
-        continue;
-      }
-
-      final tickOffset = step * 10.0;
-      final isMajor = step.isEven;
-      final halfLength = isMajor ? 8.0 : 4.0;
-      final paint = Paint()
-        ..color = tickPaint.color
-        ..strokeWidth = isMajor ? 1.2 : 0.85
-        ..style = PaintingStyle.stroke;
-
-      canvas.drawLine(
-        Offset(center.dx - halfLength, center.dy + tickOffset),
-        Offset(center.dx + halfLength, center.dy + tickOffset),
-        paint,
-      );
-      canvas.drawLine(
-        Offset(center.dx + tickOffset, center.dy - halfLength),
-        Offset(center.dx + tickOffset, center.dy + halfLength),
-        paint,
       );
     }
   }
@@ -1209,12 +629,16 @@ class ReticleMeasurementPainter extends CustomPainter {
     double radius,
     Paint reticlePaint,
   ) {
+    final visibility = overlayOpacity.clamp(0.2, 1.0);
     final dotPaint = Paint()
-      ..color = reticlePaint.color
+      ..color = _reticleLineColor.withValues(alpha: visibility * 0.96)
+      ..style = PaintingStyle.fill;
+    final centerDotPaint = Paint()
+      ..color = _reticleCenterDotColor
       ..style = PaintingStyle.fill;
     final step = radius / 5;
 
-    canvas.drawCircle(center, 3.2, dotPaint);
+    canvas.drawCircle(center, 3.2, centerDotPaint);
 
     for (var i = 1; i <= 5; i++) {
       final offset = i * step;
@@ -1242,30 +666,65 @@ class ReticleMeasurementPainter extends CustomPainter {
     }
   }
 
-  void _drawSimpleCrosshair(
+  void _drawMilHashCrosshair(
     Canvas canvas,
     Offset center,
-    double radius,
-    Paint tickPaint,
-    Paint reticlePaint,
-  ) {
+    double radius, {
+    required int minorTicksPerMil,
+    required double majorHalfLength,
+    required double minorHalfLength,
+    required double majorStrokeWidth,
+    required double minorStrokeWidth,
+    required double centerDotRadius,
+  }) {
+    final visibility = overlayOpacity.clamp(0.2, 1.0);
     final majorStep = radius / 5;
-    final minorStep = majorStep / 2;
+    final minorStep = majorStep / minorTicksPerMil;
     final majorPaint = Paint()
-      ..color = tickPaint.color.withValues(alpha: 0.72)
+      ..color = _reticleLineColor.withValues(alpha: visibility * 0.96)
       ..style = PaintingStyle.stroke
-      ..strokeWidth = 1.05;
+      ..strokeWidth = majorStrokeWidth;
     final minorPaint = Paint()
-      ..color = tickPaint.color.withValues(alpha: 0.52)
+      ..color = _reticleMinorLineColor.withValues(alpha: visibility * 0.9)
       ..style = PaintingStyle.stroke
-      ..strokeWidth = 0.8;
+      ..strokeWidth = minorStrokeWidth;
     final centerDotPaint = Paint()
-      ..color = reticlePaint.color
+      ..color = _reticleCenterDotColor
       ..style = PaintingStyle.fill;
+
+    final totalMinorTicks = minorTicksPerMil * 5;
+    for (var tick = 1; tick < totalMinorTicks; tick++) {
+      if (tick % minorTicksPerMil == 0) {
+        continue;
+      }
+      final minorOffset = minorStep * tick;
+      if (minorOffset >= radius + 0.001) {
+        continue;
+      }
+      canvas.drawLine(
+        Offset(center.dx - minorHalfLength, center.dy - minorOffset),
+        Offset(center.dx + minorHalfLength, center.dy - minorOffset),
+        minorPaint,
+      );
+      canvas.drawLine(
+        Offset(center.dx - minorHalfLength, center.dy + minorOffset),
+        Offset(center.dx + minorHalfLength, center.dy + minorOffset),
+        minorPaint,
+      );
+      canvas.drawLine(
+        Offset(center.dx - minorOffset, center.dy - minorHalfLength),
+        Offset(center.dx - minorOffset, center.dy + minorHalfLength),
+        minorPaint,
+      );
+      canvas.drawLine(
+        Offset(center.dx + minorOffset, center.dy - minorHalfLength),
+        Offset(center.dx + minorOffset, center.dy + minorHalfLength),
+        minorPaint,
+      );
+    }
 
     for (var i = 1; i <= 5; i++) {
       final offset = majorStep * i;
-      final majorHalfLength = i == 5 ? 7.0 : 8.0;
       canvas.drawLine(
         Offset(center.dx - majorHalfLength, center.dy - offset),
         Offset(center.dx + majorHalfLength, center.dy - offset),
@@ -1286,141 +745,109 @@ class ReticleMeasurementPainter extends CustomPainter {
         Offset(center.dx + offset, center.dy + majorHalfLength),
         majorPaint,
       );
-
-      if (i < 5) {
-        final minorOffset = offset + minorStep;
-        const minorHalfLength = 4.0;
-        canvas.drawLine(
-          Offset(center.dx - minorHalfLength, center.dy - minorOffset),
-          Offset(center.dx + minorHalfLength, center.dy - minorOffset),
-          minorPaint,
-        );
-        canvas.drawLine(
-          Offset(center.dx - minorHalfLength, center.dy + minorOffset),
-          Offset(center.dx + minorHalfLength, center.dy + minorOffset),
-          minorPaint,
-        );
-        canvas.drawLine(
-          Offset(center.dx - minorOffset, center.dy - minorHalfLength),
-          Offset(center.dx - minorOffset, center.dy + minorHalfLength),
-          minorPaint,
-        );
-        canvas.drawLine(
-          Offset(center.dx + minorOffset, center.dy - minorHalfLength),
-          Offset(center.dx + minorOffset, center.dy + minorHalfLength),
-          minorPaint,
-        );
-      }
     }
 
-    canvas.drawCircle(center, 3.4, centerDotPaint);
+    canvas.drawCircle(center, centerDotRadius, centerDotPaint);
   }
 
-  void _drawChristmasTree(
-    Canvas canvas,
-    Size size,
-    Offset center,
-    Paint tickPaint,
-  ) {
+  void _drawChristmasTree(Canvas canvas, Size size, Offset center) {
+    final visibility = overlayOpacity.clamp(0.2, 1.0);
     final radius = size.shortestSide * _reticleInnerRadiusFactor;
     final scopeRadius = radius * _reticleOuterRadiusMultiplier;
-    const milStep = 20.0;
-    final branchPaint = Paint()
-      ..color = tickPaint.color
+    final milStep = radius / 5;
+    final minorStep = milStep / 5;
+    final maxTreeHalfWidth = math.min(scopeRadius - 18, (size.width / 2) - 24);
+    final rowPaint = Paint()
+      ..color = _reticleLineColor.withValues(alpha: visibility * 0.96)
       ..style = PaintingStyle.stroke
-      ..strokeWidth = 1.15;
-    final branchMinorPaint = Paint()
-      ..color = tickPaint.color.withValues(alpha: 0.7)
+      ..strokeWidth = 1.25;
+    final majorTickPaint = Paint()
+      ..color = _reticleLineColor.withValues(alpha: visibility * 0.96)
       ..style = PaintingStyle.stroke
-      ..strokeWidth = 0.85;
-    final windDotPaint = Paint()
-      ..color = AppColors.primary.withValues(alpha: 0.65)
-      ..style = PaintingStyle.fill;
-    final treeLabelStyle = const TextStyle(
-      color: AppColors.textMuted,
-      fontSize: 11,
-      fontWeight: FontWeight.w600,
+      ..strokeWidth = 1.35;
+    final minorTickPaint = Paint()
+      ..color = _reticleMinorLineColor.withValues(alpha: visibility * 0.85)
+      ..style = PaintingStyle.stroke
+      ..strokeWidth = 0.95;
+    final treeLabelStyle = TextStyle(
+      color: _reticleLabelColor.withValues(alpha: visibility * 0.9),
+      fontSize: 15,
+      fontWeight: FontWeight.w700,
     );
 
-    for (final rowValue in [2, 4, 6, 8]) {
-      final y = center.dy + (rowValue * milStep);
-      if (y > size.height - 18) {
-        continue;
+    for (var row = 1; row <= 10; row++) {
+      final y = center.dy + (row * milStep);
+      if (y >= center.dy + scopeRadius - 4 || y > size.height - 16) {
+        break;
       }
 
-      final maxHalfSpan = _horizontalHalfSpanForCircle(
-        center: center,
-        radius: scopeRadius,
-        y: y,
-      );
-      final halfWidth = math.min(rowValue * milStep, maxHalfSpan - 12);
-      if (halfWidth <= 0) {
+      final halfWidth = math.min(row * milStep, maxTreeHalfWidth);
+      if (halfWidth <= minorStep * 2) {
         continue;
       }
 
       canvas.drawLine(
         Offset(center.dx - halfWidth, y),
         Offset(center.dx + halfWidth, y),
-        branchPaint,
+        rowPaint,
       );
 
-      final fullSteps = rowValue;
-      for (var i = 1; i < fullSteps; i++) {
-        final x = center.dx - halfWidth + (i * milStep);
+      final minorTickCount = (halfWidth / minorStep).floor();
+      for (var tick = 1; tick < minorTickCount; tick++) {
+        final xOffset = tick * minorStep;
+        if (xOffset >= halfWidth - 0.5) {
+          continue;
+        }
+
+        final isMajor = tick % 5 == 0;
+        final tickHalfHeight = isMajor ? 7.0 : 6.0;
+        final paint = isMajor ? majorTickPaint : minorTickPaint;
+
         canvas.drawLine(
-          Offset(x, y - 5),
-          Offset(x, y + 5),
-          i.isEven ? branchPaint : branchMinorPaint,
+          Offset(center.dx - xOffset, y - tickHalfHeight),
+          Offset(center.dx - xOffset, y + tickHalfHeight),
+          paint,
+        );
+        canvas.drawLine(
+          Offset(center.dx + xOffset, y - tickHalfHeight),
+          Offset(center.dx + xOffset, y + tickHalfHeight),
+          paint,
         );
       }
 
       canvas.drawLine(
         Offset(center.dx - halfWidth, y - 8),
         Offset(center.dx - halfWidth, y + 8),
-        branchPaint,
+        majorTickPaint,
       );
       canvas.drawLine(
         Offset(center.dx + halfWidth, y - 8),
         Offset(center.dx + halfWidth, y + 8),
-        branchPaint,
+        majorTickPaint,
       );
 
-      _paintText(
-        canvas,
-        text: '$rowValue',
-        offset: Offset(center.dx - halfWidth - 10, y - 7),
-        style: treeLabelStyle,
-      );
-      _paintText(
-        canvas,
-        text: '$rowValue',
-        offset: Offset(center.dx + halfWidth + 5, y - 7),
-        style: treeLabelStyle,
-      );
-    }
-
-    for (final rowValue in [1, 3, 5, 7]) {
-      final y = center.dy + (rowValue * milStep);
-      final maxHalfSpan = _horizontalHalfSpanForCircle(
-        center: center,
-        radius: scopeRadius,
-        y: y,
-      );
-      if (maxHalfSpan <= 10) {
-        continue;
+      if (row <= 5) {
+        _paintCenteredText(
+          canvas,
+          text: '$row',
+          center: Offset(center.dx - halfWidth - 18, y - 2),
+          style: treeLabelStyle,
+        );
+        _paintCenteredText(
+          canvas,
+          text: '$row',
+          center: Offset(center.dx + halfWidth + 18, y - 2),
+          style: treeLabelStyle,
+        );
       }
-
-      final leftDot = Offset(center.dx - maxHalfSpan + 8, y);
-      final rightDot = Offset(center.dx + maxHalfSpan - 8, y);
-      canvas.drawCircle(leftDot, 2.4, windDotPaint);
-      canvas.drawCircle(rightDot, 2.4, windDotPaint);
     }
   }
 
   void _drawAxisLabels(Canvas canvas, Size size, Offset center, double radius) {
-    final labelStyle = const TextStyle(
-      color: AppColors.textMuted,
-      fontSize: 11,
+    final visibility = overlayOpacity.clamp(0.2, 1.0);
+    final labelStyle = TextStyle(
+      color: _reticleLabelColor.withValues(alpha: visibility * 0.96),
+      fontSize: 16,
       fontWeight: FontWeight.w600,
     );
     final step = radius / 5;
@@ -1467,10 +894,11 @@ class ReticleMeasurementPainter extends CustomPainter {
     );
   }
 
-  void _drawSimpleCrosshairLabels(Canvas canvas, Offset center, double radius) {
-    final labelStyle = const TextStyle(
-      color: AppColors.textMuted,
-      fontSize: 11,
+  void _drawMilHashLabels(Canvas canvas, Offset center, double radius) {
+    final visibility = overlayOpacity.clamp(0.2, 1.0);
+    final labelStyle = TextStyle(
+      color: _reticleLabelColor.withValues(alpha: visibility * 0.96),
+      fontSize: 16,
       fontWeight: FontWeight.w600,
     );
     final step = radius / 5;
@@ -1480,25 +908,45 @@ class ReticleMeasurementPainter extends CustomPainter {
       _paintText(
         canvas,
         text: '$i',
-        offset: Offset(center.dx + 10, center.dy - offset - 7),
+        offset: Offset(center.dx - 58, center.dy + offset - 15),
         style: labelStyle,
       );
       _paintText(
         canvas,
         text: '$i',
-        offset: Offset(center.dx + 10, center.dy + offset - 7),
+        offset: Offset(center.dx + offset - 4, center.dy - 22),
         style: labelStyle,
       );
       _paintText(
         canvas,
         text: '$i',
-        offset: Offset(center.dx + offset - 4, center.dy - 21),
+        offset: Offset(center.dx - offset - 10, center.dy - 22),
         style: labelStyle,
       );
-      _paintText(
+    }
+  }
+
+  void _drawChristmasTreeLabels(Canvas canvas, Offset center, double radius) {
+    final visibility = overlayOpacity.clamp(0.2, 1.0);
+    final labelStyle = TextStyle(
+      color: _reticleLabelColor.withValues(alpha: visibility * 0.96),
+      fontSize: 16,
+      fontWeight: FontWeight.w700,
+    );
+    final step = radius / 5;
+
+    for (var i = 1; i <= 5; i++) {
+      final offset = step * i;
+      _paintCenteredText(
         canvas,
         text: '$i',
-        offset: Offset(center.dx - offset - 4, center.dy - 21),
+        center: Offset(center.dx + offset, center.dy - 18),
+        style: labelStyle,
+      );
+      _paintCenteredText(
+        canvas,
+        text: '$i',
+        center: Offset(center.dx - offset, center.dy - 18),
         style: labelStyle,
       );
     }
@@ -1510,23 +958,24 @@ class ReticleMeasurementPainter extends CustomPainter {
     Offset center,
     Paint reticlePaint,
   ) {
+    final visibility = overlayOpacity.clamp(0.2, 1.0);
     final radius = size.shortestSide * _reticleInnerRadiusFactor;
     final scopeRadius = radius * _reticleOuterRadiusMultiplier;
     final innerGap = radius * 0.5;
     final outerInset = 8.0;
     final postLengthEnd = scopeRadius - outerInset;
     final thinPaint = Paint()
-      ..color = reticlePaint.color.withValues(alpha: 0.9)
+      ..color = _reticleLineColor.withValues(alpha: visibility * 0.96)
       ..style = PaintingStyle.stroke
-      ..strokeWidth = 1.2
+      ..strokeWidth = 1.5
       ..strokeCap = StrokeCap.square;
     final thickPaint = Paint()
-      ..color = reticlePaint.color
+      ..color = _reticleLineColor.withValues(alpha: visibility * 0.96)
       ..style = PaintingStyle.stroke
-      ..strokeWidth = 8
+      ..strokeWidth = 7
       ..strokeCap = StrokeCap.square;
     final centerDotPaint = Paint()
-      ..color = reticlePaint.color
+      ..color = _reticleCenterDotColor
       ..style = PaintingStyle.fill;
 
     canvas.drawLine(
@@ -1562,33 +1011,9 @@ class ReticleMeasurementPainter extends CustomPainter {
     );
 
     canvas.drawCircle(center, 3.2, centerDotPaint);
-
-    _paintText(
-      canvas,
-      text: 'gap ≈ 2.5 ${reticleType.label}',
-      offset: Offset(center.dx + innerGap + 10, center.dy - 16),
-      style: const TextStyle(
-        color: AppColors.textMuted,
-        fontSize: 11,
-        fontWeight: FontWeight.w600,
-      ),
-    );
   }
 
-  void _drawFooter(Canvas canvas, Size size) {
-    _paintText(
-      canvas,
-      text: referenceDimension == TargetDimensionType.height ? '' : '',
-      // ? '${reticleProfile.label} • tap to set dashed base, drag to place amber height line'
-      // : '${reticleProfile.label} • tap to set dashed base, drag to place amber width line',
-      offset: Offset(18, size.height - 24),
-      style: const TextStyle(
-        color: AppColors.textMuted,
-        fontSize: 11,
-        fontWeight: FontWeight.w600,
-      ),
-    );
-  }
+  void _drawFooter(Canvas canvas, Size size) {}
 
   TextPainter _textPainter(String text, TextStyle style) {
     final painter = TextPainter(
@@ -1608,57 +1033,17 @@ class ReticleMeasurementPainter extends CustomPainter {
     _textPainter(text, style).paint(canvas, offset);
   }
 
-  void _drawTextIcon(
+  void _paintCenteredText(
     Canvas canvas, {
-    required IconData icon,
+    required String text,
     required Offset center,
-    required double size,
-    required Color color,
+    required TextStyle style,
   }) {
-    final iconPainter = TextPainter(
-      text: TextSpan(
-        text: String.fromCharCode(icon.codePoint),
-        style: TextStyle(
-          fontSize: size,
-          fontFamily: icon.fontFamily,
-          color: color,
-        ),
-      ),
-      textDirection: TextDirection.ltr,
-    )..layout();
-
-    final offset = Offset(
-      center.dx - iconPainter.width / 2,
-      center.dy - iconPainter.height / 2,
+    final painter = _textPainter(text, style);
+    painter.paint(
+      canvas,
+      Offset(center.dx - (painter.width / 2), center.dy - (painter.height / 2)),
     );
-    iconPainter.paint(canvas, offset);
-  }
-
-  void _drawBaselineActionIcon(
-    Canvas canvas, {
-    required Offset center,
-    required IconData icon,
-    required Color color,
-    required Color tooltipBackground,
-  }) {
-    final rect = RRect.fromRectAndRadius(
-      Rect.fromCenter(center: center, width: 22, height: 22),
-      const Radius.circular(6),
-    );
-    canvas.drawRRect(
-      rect,
-      Paint()
-        ..color = tooltipBackground.withValues(alpha: 0.82)
-        ..style = PaintingStyle.fill,
-    );
-    canvas.drawRRect(
-      rect,
-      Paint()
-        ..color = color.withValues(alpha: 0.58)
-        ..style = PaintingStyle.stroke
-        ..strokeWidth = 1,
-    );
-    _drawTextIcon(canvas, icon: icon, center: center, size: 12, color: color);
   }
 
   void _drawDashedLine({
@@ -1686,30 +1071,6 @@ class ReticleMeasurementPainter extends CustomPainter {
       );
       progress += dashLength + gapLength;
     }
-  }
-
-  double _horizontalHalfSpanForCircle({
-    required Offset center,
-    required double radius,
-    required double y,
-  }) {
-    final dy = (y - center.dy).abs();
-    if (dy >= radius) {
-      return 0;
-    }
-    return math.sqrt((radius * radius) - (dy * dy));
-  }
-
-  double _verticalHalfSpanForCircle({
-    required Offset center,
-    required double radius,
-    required double x,
-  }) {
-    final dx = (x - center.dx).abs();
-    if (dx >= radius) {
-      return 0;
-    }
-    return math.sqrt((radius * radius) - (dx * dx));
   }
 
   @override

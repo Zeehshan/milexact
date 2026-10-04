@@ -1,80 +1,228 @@
+import 'dart:async';
+
+import 'package:firebase_auth/firebase_auth.dart';
 import 'package:get/get.dart';
-import 'package:milexact/data/models/auth_user.dart';
-import 'package:milexact/services/storage_service.dart';
+import 'package:milexact/data/remote/firebase/firebase.dart';
+import 'package:milexact/domain/auth/auth.dart';
 
-class AuthRepository extends GetxService {
-  AuthRepository(this._storage);
+class AuthRepository extends GetxService implements AuthRepositoryContract {
+  AuthRepository(this._authDataSource, this._profileDataSource);
 
-  static const _sessionKey = 'current_session';
+  final FirebaseAuthDataSource _authDataSource;
+  final FirestoreUserProfileDataSource _profileDataSource;
 
-  final StorageService _storage;
-  final RxList<AuthUser> users = <AuthUser>[].obs;
-  final Rxn<AuthUser> currentUser = Rxn<AuthUser>();
+  AppUser? _currentUser;
+
+  @override
+  AppUser? get currentUser => _currentUser;
 
   Future<AuthRepository> init() async {
-    users.assignAll(
-      _storage.authUsersBox.values
-          .map((raw) => AuthUser.fromJson(Map<String, dynamic>.from(raw)))
-          .toList(growable: false),
-    );
-
-    final rawSession = _storage.authSessionBox.get(_sessionKey);
-    if (rawSession != null) {
-      final session = Map<String, dynamic>.from(rawSession);
-      final userId = session['userId'] as String?;
-      if (userId != null) {
-        currentUser.value = userById(userId);
-      }
-    }
-
+    _currentUser = await restoreCurrentUser();
     return this;
   }
 
-  AuthUser? userById(String id) {
-    for (final user in users) {
-      if (user.id == id) {
-        return user;
+  @override
+  Stream<AppUser?> authStateChanges() {
+    return _authDataSource.userChanges().map((user) {
+      final mapped = _mapFirebaseUser(user);
+      _currentUser = mapped;
+
+      if (mapped != null) {
+        unawaited(_syncUserProfile(mapped));
       }
-    }
-    return null;
-  }
 
-  AuthUser? userByEmail(String email) {
-    final normalized = email.trim().toLowerCase();
-    for (final user in users) {
-      if (user.email.toLowerCase() == normalized) {
-        return user;
-      }
-    }
-    return null;
-  }
-
-  Future<void> upsertUser(AuthUser user) async {
-    final index = users.indexWhere((item) => item.id == user.id);
-    if (index == -1) {
-      users.add(user);
-    } else {
-      users[index] = user;
-      users.refresh();
-    }
-
-    await _storage.authUsersBox.put(user.id, user.toJson());
-
-    if (currentUser.value?.id == user.id) {
-      currentUser.value = user;
-    }
-  }
-
-  Future<void> saveSession(AuthUser user) async {
-    currentUser.value = user;
-    await _storage.authSessionBox.put(_sessionKey, <String, dynamic>{
-      'userId': user.id,
-      'signedInAt': DateTime.now().toIso8601String(),
+      return mapped;
     });
   }
 
-  Future<void> clearSession() async {
-    currentUser.value = null;
-    await _storage.authSessionBox.delete(_sessionKey);
+  @override
+  Future<AppUser?> restoreCurrentUser() async {
+    final user = _mapFirebaseUser(_authDataSource.currentUser);
+    _currentUser = user;
+    if (user != null) {
+      unawaited(_syncUserProfile(user));
+    }
+    return user;
+  }
+
+  @override
+  Future<AppUser?> reloadCurrentUser() async {
+    final user = _mapFirebaseUser(await _authDataSource.reloadCurrentUser());
+    _currentUser = user;
+    if (user != null) {
+      await _syncUserProfile(user);
+    }
+    return user;
+  }
+
+  @override
+  Future<AppUser> signUpWithEmail({
+    required String email,
+    required String password,
+  }) async {
+    try {
+      final credential = await _authDataSource.createUserWithEmailAndPassword(
+        email: email,
+        password: password,
+      );
+      return await _completeAuthenticatedFlow(credential.user);
+    } on FirebaseAuthException catch (error) {
+      throw _mapFirebaseAuthException(error);
+    }
+  }
+
+  @override
+  Future<AppUser> signInWithEmail({
+    required String email,
+    required String password,
+  }) async {
+    try {
+      final credential = await _authDataSource.signInWithEmailAndPassword(
+        email: email,
+        password: password,
+      );
+      return await _completeAuthenticatedFlow(credential.user);
+    } on FirebaseAuthException catch (error) {
+      throw _mapFirebaseAuthException(error);
+    }
+  }
+
+  @override
+  Future<AppUser> signInWithGoogle() async {
+    try {
+      final credential = await _authDataSource.signInWithGoogle();
+      return await _completeAuthenticatedFlow(credential.user);
+    } on FirebaseAuthException catch (error) {
+      throw _mapFirebaseAuthException(error);
+    }
+  }
+
+  @override
+  Future<AppUser> signInWithApple() async {
+    try {
+      final credential = await _authDataSource.signInWithApple();
+      return await _completeAuthenticatedFlow(credential.user);
+    } on FirebaseAuthException catch (error) {
+      throw _mapFirebaseAuthException(error);
+    }
+  }
+
+  @override
+  Future<void> sendPasswordResetEmail({required String email}) async {
+    try {
+      await _authDataSource.sendPasswordResetEmail(email: email);
+    } on FirebaseAuthException catch (error) {
+      throw _mapFirebaseAuthException(error);
+    }
+  }
+
+  @override
+  Future<void> sendEmailVerification() async {
+    try {
+      await _authDataSource.sendEmailVerification();
+    } on FirebaseAuthException catch (error) {
+      throw _mapFirebaseAuthException(error);
+    }
+  }
+
+  @override
+  Future<void> signOut() async {
+    await _authDataSource.signOut();
+    _currentUser = null;
+  }
+
+  Future<AppUser> _completeAuthenticatedFlow(User? user) async {
+    final mapped = _mapFirebaseUser(user);
+    if (mapped == null) {
+      throw const AuthException(
+        'Authentication completed without a valid user.',
+      );
+    }
+
+    try {
+      await _syncUserProfile(mapped);
+    } catch (error) {
+      await _authDataSource.signOut();
+      _currentUser = null;
+
+      if (error is AuthException) {
+        rethrow;
+      }
+
+      throw const AuthException(
+        'Authenticated successfully, but failed to sync your user profile.',
+      );
+    }
+
+    _currentUser = mapped;
+    return mapped;
+  }
+
+  Future<void> _syncUserProfile(AppUser user) async {
+    await _profileDataSource.upsertUser(user);
+  }
+
+  AppUser? _mapFirebaseUser(User? user) {
+    if (user == null) {
+      return null;
+    }
+
+    final providerIds =
+        user.providerData
+            .map((provider) => provider.providerId)
+            .where((providerId) => providerId.isNotEmpty)
+            .toSet()
+            .toList(growable: false)
+          ..sort();
+
+    return AppUser(
+      id: user.uid,
+      email: user.email?.trim().toLowerCase() ?? '',
+      displayName: user.displayName,
+      photoUrl: user.photoURL,
+      emailVerified: user.emailVerified,
+      providerIds: providerIds,
+      createdAt: user.metadata.creationTime,
+      updatedAt: user.metadata.lastSignInTime,
+      lastSignInAt: user.metadata.lastSignInTime,
+    );
+  }
+
+  AuthException _mapFirebaseAuthException(FirebaseAuthException error) {
+    switch (error.code) {
+      case 'email-already-in-use':
+        return const AuthException(
+          'An account with this email already exists.',
+        );
+      case 'invalid-email':
+        return const AuthException('Enter a valid email address.');
+      case 'weak-password':
+        return const AuthException('Password must be at least 8 characters.');
+      case 'user-not-found':
+        return const AuthException('No account found for this email.');
+      case 'wrong-password':
+      case 'invalid-credential':
+        return const AuthException('Invalid email or password.');
+      case 'user-disabled':
+        return const AuthException('This account has been disabled.');
+      case 'network-request-failed':
+        return const AuthException(
+          'Network connection is required for authentication.',
+        );
+      case 'too-many-requests':
+        return const AuthException('Too many attempts. Try again later.');
+      case 'operation-not-allowed':
+        return const AuthException(
+          'This sign-in method is not enabled for the project.',
+        );
+      case 'account-exists-with-different-credential':
+        return const AuthException(
+          'This email is already linked to a different sign-in method.',
+        );
+      default:
+        return AuthException(
+          error.message ?? 'Authentication failed. Please try again.',
+        );
+    }
   }
 }

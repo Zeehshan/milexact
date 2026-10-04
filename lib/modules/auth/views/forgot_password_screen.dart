@@ -1,6 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:get/get.dart';
-import 'package:milexact/modules/auth/controllers/forgot_password_controller.dart';
+import 'package:milexact/modules/auth/controllers/controllers.dart';
 import 'package:milexact/modules/auth/widgets/auth_card_layout.dart';
 import 'package:milexact/shared/constants/app_spacing.dart';
 import 'package:milexact/shared/widgets/labeled_text_field.dart';
@@ -16,7 +16,8 @@ class ForgotPasswordScreen extends GetView<ForgotPasswordController> {
       backLabel: 'Back to sign in',
       onBack: Get.back,
       title: 'Reset your password',
-      subtitle: 'Enter your email and we will prepare a local reset flow.',
+      subtitle:
+          'Enter your email and we will send a Firebase password reset link.',
       child: Obx(
         () => Column(
           crossAxisAlignment: CrossAxisAlignment.stretch,

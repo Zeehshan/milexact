@@ -1,17 +1,15 @@
 import 'package:flutter/material.dart';
 import 'package:get/get.dart';
 import 'package:milexact/app/theme/app_colors.dart';
-import 'package:milexact/app/routes/app_routes.dart';
+import 'package:milexact/modules/auth/controllers/controllers.dart';
 import 'package:milexact/modules/auth/widgets/auth_card_layout.dart';
 import 'package:milexact/shared/constants/app_spacing.dart';
 
-class CheckEmailScreen extends StatelessWidget {
+class CheckEmailScreen extends GetView<CheckEmailController> {
   const CheckEmailScreen({super.key});
 
   @override
   Widget build(BuildContext context) {
-    final email =
-        ((Get.arguments as Map<String, dynamic>?)?['email'] as String?) ?? '';
     final theme = Theme.of(context);
 
     return AuthCardLayout(
@@ -28,44 +26,81 @@ class CheckEmailScreen extends StatelessWidget {
           color: AppColors.primary,
         ),
       ),
-      title: 'Check your email',
-      subtitle:
-          'A reset link would be sent to $email. In local mode, continue below to set a new password.',
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.stretch,
-        children: [
-          Container(
-            padding: const EdgeInsets.all(AppSpacing.md),
-            decoration: BoxDecoration(
-              color: AppColors.success.withValues(alpha: 0.1),
-              borderRadius: BorderRadius.circular(18),
-              border: Border.all(
-                color: AppColors.success.withValues(alpha: 0.3),
+      title: controller.isVerificationMode
+          ? 'Verify your email'
+          : 'Check your email',
+      subtitle: controller.isVerificationMode
+          ? 'We sent a verification email to ${controller.email}. Verify your address before entering the app.'
+          : 'We sent password reset instructions to ${controller.email}. Follow the email link to update your password.',
+      child: Obx(
+        () => Column(
+          crossAxisAlignment: CrossAxisAlignment.stretch,
+          children: [
+            Container(
+              padding: const EdgeInsets.all(AppSpacing.md),
+              decoration: BoxDecoration(
+                color: AppColors.success.withValues(alpha: 0.1),
+                borderRadius: BorderRadius.circular(18),
+                border: Border.all(
+                  color: AppColors.success.withValues(alpha: 0.3),
+                ),
+              ),
+              child: Text(
+                controller.isVerificationMode
+                    ? 'Open the verification email, confirm the address, then return here and continue.'
+                    : 'Open the reset email, complete the password change, then sign back in.',
+                style: theme.textTheme.bodyMedium?.copyWith(
+                  color: AppColors.success,
+                ),
+                textAlign: TextAlign.center,
               ),
             ),
-            child: Text(
-              'No email is sent while the app is running in local auth mode. Use the button below to continue the reset flow on this device.',
-              style: theme.textTheme.bodyMedium?.copyWith(
-                color: AppColors.success,
+            if (controller.errorMessage.isNotEmpty) ...[
+              const SizedBox(height: AppSpacing.sm),
+              Text(
+                controller.errorMessage.value,
+                style: theme.textTheme.bodySmall?.copyWith(
+                  color: theme.colorScheme.error,
+                ),
+                textAlign: TextAlign.center,
               ),
-              textAlign: TextAlign.center,
+            ],
+            const SizedBox(height: AppSpacing.md),
+            FilledButton(
+              onPressed: controller.isLoading.value
+                  ? null
+                  : controller.continuePrimaryAction,
+              child: controller.isLoading.value
+                  ? const SizedBox(
+                      width: 20,
+                      height: 20,
+                      child: CircularProgressIndicator(strokeWidth: 2),
+                    )
+                  : Text(
+                      controller.isVerificationMode
+                          ? 'I verified my email'
+                          : 'Back to sign in',
+                    ),
             ),
-          ),
-          const SizedBox(height: AppSpacing.md),
-          FilledButton(
-            onPressed: () => Get.toNamed(
-              AppRoutes.resetPassword,
-              arguments: <String, dynamic>{'email': email},
+            const SizedBox(height: AppSpacing.sm),
+            OutlinedButton(
+              onPressed: controller.isLoading.value ? null : controller.resend,
+              child: Text(
+                controller.isVerificationMode
+                    ? 'Resend verification email'
+                    : 'Resend reset email',
+              ),
             ),
-            child: const Text('Continue to reset password'),
-          ),
-          const SizedBox(height: AppSpacing.sm),
-          TextButton.icon(
-            onPressed: () => Get.offAllNamed(AppRoutes.signIn),
-            icon: const Icon(Icons.arrow_back_rounded),
-            label: const Text('Back to sign in'),
-          ),
-        ],
+            const SizedBox(height: AppSpacing.sm),
+            TextButton.icon(
+              onPressed: controller.isLoading.value
+                  ? null
+                  : controller.backToSignIn,
+              icon: const Icon(Icons.arrow_back_rounded),
+              label: const Text('Back to sign in'),
+            ),
+          ],
+        ),
       ),
     );
   }

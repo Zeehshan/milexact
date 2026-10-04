@@ -1,113 +1,177 @@
+import 'dart:async';
+
 import 'package:flutter_test/flutter_test.dart';
-import 'package:milexact/data/models/auth_user.dart';
-import 'package:milexact/data/repositories/auth_repository.dart';
-import 'package:milexact/services/auth_api_service.dart';
+import 'package:milexact/domain/auth/entities/app_user.dart';
+import 'package:milexact/domain/auth/repositories/auth_repository_contract.dart';
+import 'package:milexact/domain/auth/use_cases/observe_auth_state_use_case.dart';
+import 'package:milexact/domain/auth/use_cases/reload_current_user_use_case.dart';
+import 'package:milexact/domain/auth/use_cases/restore_current_user_use_case.dart';
+import 'package:milexact/domain/auth/use_cases/send_email_verification_use_case.dart';
+import 'package:milexact/domain/auth/use_cases/send_password_reset_email_use_case.dart';
+import 'package:milexact/domain/auth/use_cases/sign_in_with_apple_use_case.dart';
+import 'package:milexact/domain/auth/use_cases/sign_in_with_email_use_case.dart';
+import 'package:milexact/domain/auth/use_cases/sign_in_with_google_use_case.dart';
+import 'package:milexact/domain/auth/use_cases/sign_out_use_case.dart';
+import 'package:milexact/domain/auth/use_cases/sign_up_with_email_use_case.dart';
 import 'package:milexact/services/auth_service.dart';
-import 'package:milexact/services/social_identity_service.dart';
-import 'package:milexact/services/storage_service.dart';
 
 void main() {
   group('AuthService', () {
     late _FakeAuthRepository repository;
     late AuthService service;
 
-    setUp(() {
+    setUp(() async {
       repository = _FakeAuthRepository();
       service = AuthService(
-        repository,
-        _FakeAuthApiService(),
-        _FakeSocialIdentityService(),
+        observeAuthStateUseCase: ObserveAuthStateUseCase(repository),
+        restoreCurrentUserUseCase: RestoreCurrentUserUseCase(repository),
+        reloadCurrentUserUseCase: ReloadCurrentUserUseCase(repository),
+        signUpWithEmailUseCase: SignUpWithEmailUseCase(repository),
+        signInWithEmailUseCase: SignInWithEmailUseCase(repository),
+        signInWithGoogleUseCase: SignInWithGoogleUseCase(repository),
+        signInWithAppleUseCase: SignInWithAppleUseCase(repository),
+        sendPasswordResetEmailUseCase: SendPasswordResetEmailUseCase(
+          repository,
+        ),
+        sendEmailVerificationUseCase: SendEmailVerificationUseCase(repository),
+        signOutUseCase: SignOutUseCase(repository),
       );
+      await service.init();
     });
 
-    test('sign up creates a normalized local session', () async {
+    test('sign up normalizes email and sends verification', () async {
       await service.signUp(
         email: ' Shooter@Example.com ',
         password: 'secret123',
       );
 
       expect(service.currentUser.value, isNotNull);
-      expect(service.currentUser.value!.email, 'shooter@example.com');
-      expect(repository.users, hasLength(1));
+      expect(service.currentUser.value?.email, 'shooter@example.com');
+      expect(repository.lastSignedUpEmail, 'shooter@example.com');
+      expect(repository.sentVerificationEmail, isTrue);
     });
 
-    test('sign in rejects an incorrect password', () async {
-      await service.signUp(email: 'shooter@example.com', password: 'secret123');
-      await repository.clearSession();
+    test(
+      'sign in rejects invalid email format before repository call',
+      () async {
+        expect(
+          () => service.signIn(email: 'not-an-email', password: 'secret123'),
+          throwsA(isA<AuthException>()),
+        );
+        expect(repository.lastSignedInEmail, isNull);
+      },
+    );
 
-      expect(
-        () => service.signIn(
-          email: 'shooter@example.com',
-          password: 'wrong-pass',
-        ),
-        throwsA(isA<AuthException>()),
-      );
-    });
+    test(
+      'password reset normalizes email and delegates to repository',
+      () async {
+        final normalized = await service.requestPasswordReset(
+          email: ' Shooter@Example.com ',
+        );
 
-    test('reset password updates the stored hash and clears session', () async {
-      await service.signUp(email: 'shooter@example.com', password: 'secret123');
-      final beforeHash = repository.currentUser.value!.passwordHash;
-
-      await service.resetPassword(
-        email: 'shooter@example.com',
-        newPassword: 'new-secret123',
-      );
-
-      expect(repository.currentUser.value, isNull);
-      expect(repository.users.single.passwordHash, isNot(beforeHash));
-    });
+        expect(normalized, 'shooter@example.com');
+        expect(repository.lastResetEmail, 'shooter@example.com');
+      },
+    );
   });
 }
 
-class _FakeAuthApiService extends AuthApiService {}
+class _FakeAuthRepository implements AuthRepositoryContract {
+  final _streamController = StreamController<AppUser?>.broadcast();
 
-class _FakeSocialIdentityService extends SocialIdentityService {}
-
-class _FakeAuthRepository extends AuthRepository {
-  _FakeAuthRepository() : super(StorageService());
+  AppUser? _currentUser;
+  String? lastSignedUpEmail;
+  String? lastSignedInEmail;
+  String? lastResetEmail;
+  bool sentVerificationEmail = false;
 
   @override
-  AuthUser? userById(String id) {
-    for (final user in users) {
-      if (user.id == id) {
-        return user;
-      }
-    }
-    return null;
+  AppUser? get currentUser => _currentUser;
+
+  @override
+  Stream<AppUser?> authStateChanges() => _streamController.stream;
+
+  @override
+  Future<AppUser?> reloadCurrentUser() async => _currentUser;
+
+  @override
+  Future<AppUser?> restoreCurrentUser() async => _currentUser;
+
+  @override
+  Future<void> sendEmailVerification() async {
+    sentVerificationEmail = true;
   }
 
   @override
-  AuthUser? userByEmail(String email) {
-    final normalized = email.trim().toLowerCase();
-    for (final user in users) {
-      if (user.email.toLowerCase() == normalized) {
-        return user;
-      }
-    }
-    return null;
+  Future<void> sendPasswordResetEmail({required String email}) async {
+    lastResetEmail = email;
   }
 
   @override
-  Future<void> upsertUser(AuthUser user) async {
-    final index = users.indexWhere((item) => item.id == user.id);
-    if (index == -1) {
-      users.add(user);
-    } else {
-      users[index] = user;
-      users.refresh();
-    }
-    if (currentUser.value?.id == user.id) {
-      currentUser.value = user;
-    }
+  Future<AppUser> signInWithApple() async {
+    return _setCurrentUser(
+      const AppUser(
+        id: 'apple-user',
+        email: 'apple@example.com',
+        emailVerified: true,
+        providerIds: ['apple.com'],
+      ),
+    );
   }
 
   @override
-  Future<void> saveSession(AuthUser user) async {
-    currentUser.value = user;
+  Future<AppUser> signInWithEmail({
+    required String email,
+    required String password,
+  }) async {
+    lastSignedInEmail = email;
+    return _setCurrentUser(
+      AppUser(
+        id: 'email-user',
+        email: email,
+        emailVerified: true,
+        providerIds: const ['password'],
+      ),
+    );
   }
 
   @override
-  Future<void> clearSession() async {
-    currentUser.value = null;
+  Future<AppUser> signInWithGoogle() async {
+    return _setCurrentUser(
+      const AppUser(
+        id: 'google-user',
+        email: 'google@example.com',
+        emailVerified: true,
+        providerIds: ['google.com'],
+      ),
+    );
+  }
+
+  @override
+  Future<void> signOut() async {
+    _currentUser = null;
+    _streamController.add(null);
+  }
+
+  @override
+  Future<AppUser> signUpWithEmail({
+    required String email,
+    required String password,
+  }) async {
+    lastSignedUpEmail = email;
+    return _setCurrentUser(
+      AppUser(
+        id: 'signup-user',
+        email: email,
+        emailVerified: false,
+        providerIds: const ['password'],
+      ),
+    );
+  }
+
+  Future<AppUser> _setCurrentUser(AppUser user) async {
+    _currentUser = user;
+    _streamController.add(user);
+    return user;
   }
 }

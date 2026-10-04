@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:get/get.dart';
 import 'package:milexact/app/routes/app_routes.dart';
+import 'package:milexact/modules/auth/models/models.dart';
 import 'package:milexact/services/auth_service.dart';
 
 class SignInController extends GetxController {
@@ -15,6 +16,8 @@ class SignInController extends GetxController {
   final isLoading = false.obs;
   final socialLoadingProvider = RxnString();
   final errorMessage = ''.obs;
+
+  bool get supportsAppleSignIn => _authService.supportsAppleSignIn;
 
   @override
   void onClose() {
@@ -41,6 +44,17 @@ class SignInController extends GetxController {
 
     try {
       await _authService.signIn(email: email, password: password);
+      if (_authService.needsEmailVerification) {
+        Get.offAllNamed(
+          AppRoutes.checkEmail,
+          arguments: <String, dynamic>{
+            'email': _authService.currentUser.value?.email ?? email.trim(),
+            'mode': CheckEmailMode.verification.routeValue,
+          },
+        );
+        return;
+      }
+
       Get.offAllNamed(AppRoutes.home);
     } on AuthException catch (error) {
       errorMessage.value = error.message;
@@ -72,6 +86,18 @@ class SignInController extends GetxController {
 
     try {
       await action();
+      if (_authService.needsEmailVerification) {
+        Get.offAllNamed(
+          AppRoutes.checkEmail,
+          arguments: <String, dynamic>{
+            'email':
+                _authService.currentUser.value?.email ??
+                emailController.text.trim(),
+            'mode': CheckEmailMode.verification.routeValue,
+          },
+        );
+        return;
+      }
       Get.offAllNamed(AppRoutes.home);
     } on AuthException catch (error) {
       errorMessage.value = error.message;

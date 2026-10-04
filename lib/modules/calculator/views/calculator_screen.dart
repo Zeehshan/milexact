@@ -297,14 +297,12 @@ class CalculatorScreen extends GetView<CalculatorController> {
                     const SizedBox(height: AppSpacing.sm),
                     _ReticleOptionsPanel(
                       isMeasuring: controller.isMeasurementModeEnabled.value,
-                      thickness: controller.reticleLineThickness.value,
-                      opacity: controller.reticleOverlayOpacity.value,
+                      visibility: controller.reticleOverlayOpacity.value,
                       zoomFactor: controller.reticleZoom.value,
                       onMeasurementModeChanged:
                           controller.setMeasurementModeEnabled,
                       onReset: controller.resetReticleMeasurement,
-                      onThicknessChanged: controller.setReticleLineThickness,
-                      onOpacityChanged: controller.setReticleOverlayOpacity,
+                      onVisibilityChanged: controller.setReticleOverlayOpacity,
                       onZoomStep: controller.adjustReticleZoom,
                     ),
                     const SizedBox(height: AppSpacing.md),
@@ -322,11 +320,11 @@ class CalculatorScreen extends GetView<CalculatorController> {
                     const SizedBox(height: AppSpacing.sm),
                     Text(
                       !controller.isMeasurementModeEnabled.value
-                          ? 'Enable Measurement Mode to place the dashed baseline and drag the amber measurement line.'
+                          ? 'Enable Measurement Mode to keep the baseline fixed at origin zero and drag only the amber finish line.'
                           : controller.referenceDimension.value ==
                                 TargetDimensionType.height
-                          ? 'Using ${controller.selectedReticleProfile.value.label}. Tap anywhere to place the dashed baseline, then drag to place the amber measurement line for target height.'
-                          : 'Using ${controller.selectedReticleProfile.value.label}. Tap anywhere to place the dashed baseline, then drag to place the amber measurement line for the target ${controller.referenceDimension.value.label.toLowerCase()}.',
+                          ? 'Using ${controller.selectedReticleProfile.value.label}. Baseline is locked at origin zero. Drag to place the amber finish line for target height.'
+                          : 'Using ${controller.selectedReticleProfile.value.label}. Baseline is locked at origin zero. Drag to place the amber finish line for the target ${controller.referenceDimension.value.label.toLowerCase()}.',
                       style: theme.textTheme.bodySmall,
                     ),
                     const SizedBox(height: AppSpacing.md),
@@ -422,31 +420,27 @@ class CalculatorScreen extends GetView<CalculatorController> {
 class _ReticleOptionsPanel extends StatelessWidget {
   const _ReticleOptionsPanel({
     required this.isMeasuring,
-    required this.thickness,
-    required this.opacity,
+    required this.visibility,
     required this.zoomFactor,
     required this.onMeasurementModeChanged,
     required this.onReset,
-    required this.onThicknessChanged,
-    required this.onOpacityChanged,
+    required this.onVisibilityChanged,
     required this.onZoomStep,
   });
 
   final bool isMeasuring;
-  final double thickness;
-  final double opacity;
+  final double visibility;
   final double zoomFactor;
   final ValueChanged<bool> onMeasurementModeChanged;
   final VoidCallback onReset;
-  final ValueChanged<double> onThicknessChanged;
-  final ValueChanged<double> onOpacityChanged;
+  final ValueChanged<double> onVisibilityChanged;
   final ValueChanged<double> onZoomStep;
 
   @override
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
     final colorScheme = theme.colorScheme;
-    final opacityPercent = (opacity.clamp(0.35, 1.0) * 100).round();
+    final visibilityPercent = (visibility.clamp(0.2, 1.0) * 100).round();
     final zoomPercent = (zoomFactor.clamp(0.55, 3.0) * 100).round();
 
     return Center(
@@ -523,108 +517,50 @@ class _ReticleOptionsPanel extends StatelessWidget {
           const SizedBox(height: AppSpacing.sm),
           Row(
             children: [
-              Expanded(
-                child: _ReticleSliderPill(
-                  label: 'Thickness',
-                  valueText: '${thickness.toStringAsFixed(1)}x',
-                  value: thickness,
-                  min: 0.8,
-                  max: 3.0,
-                  onChanged: onThicknessChanged,
-                ),
-              ),
-              const SizedBox(width: AppSpacing.sm),
-              Expanded(
-                child: _ReticleSliderPill(
-                  label: 'Opacity',
-                  valueText: '$opacityPercent%',
-                  value: opacity,
-                  min: 0.35,
-                  max: 1,
-                  onChanged: onOpacityChanged,
-                ),
-              ),
-            ],
-          ),
-        ],
-      ),
-    );
-  }
-}
-
-class _ReticleSliderPill extends StatelessWidget {
-  const _ReticleSliderPill({
-    required this.label,
-    required this.valueText,
-    required this.value,
-    required this.min,
-    required this.max,
-    required this.onChanged,
-  });
-
-  final String label;
-  final String valueText;
-  final double value;
-  final double min;
-  final double max;
-  final ValueChanged<double> onChanged;
-
-  @override
-  Widget build(BuildContext context) {
-    final theme = Theme.of(context);
-    final colorScheme = theme.colorScheme;
-
-    return Container(
-      height: 74,
-      padding: const EdgeInsets.fromLTRB(14, 10, 10, 6),
-      decoration: BoxDecoration(
-        color: colorScheme.surfaceContainerHighest.withValues(alpha: 0.42),
-        borderRadius: BorderRadius.circular(18),
-      ),
-      child: Column(
-        mainAxisAlignment: MainAxisAlignment.center,
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          Row(
-            children: [
-              Expanded(
+              SizedBox(
+                width: 104,
                 child: Text(
-                  label,
-                  maxLines: 1,
-                  overflow: TextOverflow.ellipsis,
+                  'VISIBILITY',
                   style: theme.textTheme.labelLarge?.copyWith(
                     color: colorScheme.onSurfaceVariant,
-                    fontWeight: FontWeight.w800,
-                    letterSpacing: 0.3,
+                    fontWeight: FontWeight.w700,
+                    letterSpacing: 1.6,
                   ),
                 ),
               ),
-              Text(
-                valueText,
-                style: theme.textTheme.labelMedium?.copyWith(
-                  color: colorScheme.onSurfaceVariant,
-                  fontWeight: FontWeight.w800,
-                  fontFeatures: const [FontFeature.tabularFigures()],
+              Expanded(
+                child: SliderTheme(
+                  data: SliderTheme.of(context).copyWith(
+                    trackHeight: 4,
+                    thumbShape: const RoundSliderThumbShape(
+                      enabledThumbRadius: 12,
+                    ),
+                    overlayShape: const RoundSliderOverlayShape(
+                      overlayRadius: 18,
+                    ),
+                  ),
+                  child: Slider(
+                    value: visibility.clamp(0.2, 1.0),
+                    min: 0.2,
+                    max: 1.0,
+                    onChanged: onVisibilityChanged,
+                  ),
+                ),
+              ),
+              const SizedBox(width: AppSpacing.sm),
+              SizedBox(
+                width: 52,
+                child: Text(
+                  '$visibilityPercent%',
+                  textAlign: TextAlign.right,
+                  style: theme.textTheme.titleMedium?.copyWith(
+                    color: colorScheme.onSurfaceVariant,
+                    fontWeight: FontWeight.w700,
+                    fontFeatures: const [FontFeature.tabularFigures()],
+                  ),
                 ),
               ),
             ],
-          ),
-          const SizedBox(height: 2),
-          Expanded(
-            child: SliderTheme(
-              data: SliderTheme.of(context).copyWith(
-                trackHeight: 4,
-                thumbShape: const RoundSliderThumbShape(enabledThumbRadius: 12),
-                overlayShape: const RoundSliderOverlayShape(overlayRadius: 20),
-              ),
-              child: Slider(
-                padding: EdgeInsets.zero,
-                value: value.clamp(min, max),
-                min: min,
-                max: max,
-                onChanged: onChanged,
-              ),
-            ),
           ),
         ],
       ),

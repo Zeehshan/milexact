@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:get/get.dart';
 import 'package:milexact/app/routes/app_routes.dart';
+import 'package:milexact/modules/auth/models/models.dart';
 import 'package:milexact/services/auth_service.dart';
 
 class ForgotPasswordController extends GetxController {
@@ -34,7 +35,10 @@ class ForgotPasswordController extends GetxController {
       );
       Get.toNamed(
         AppRoutes.checkEmail,
-        arguments: <String, dynamic>{'email': normalizedEmail},
+        arguments: <String, dynamic>{
+          'email': normalizedEmail,
+          'mode': CheckEmailMode.passwordReset.routeValue,
+        },
       );
     } on AuthException catch (error) {
       errorMessage.value = error.message;

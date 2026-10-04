@@ -1,7 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:get/get.dart';
 import 'package:milexact/app/routes/app_routes.dart';
-import 'package:milexact/modules/auth/controllers/sign_in_controller.dart';
+import 'package:milexact/modules/auth/controllers/controllers.dart';
 import 'package:milexact/modules/auth/widgets/auth_card_layout.dart';
 import 'package:milexact/shared/constants/app_spacing.dart';
 import 'package:milexact/shared/widgets/labeled_text_field.dart';
@@ -34,20 +34,22 @@ class SignInScreen extends GetView<SignInController> {
                   : const _GoogleBadge(),
               label: const Text('Continue with Google'),
             ),
-            const SizedBox(height: AppSpacing.sm),
-            OutlinedButton.icon(
-              onPressed: controller.socialLoadingProvider.value == null
-                  ? controller.signInWithApple
-                  : null,
-              icon: controller.socialLoadingProvider.value == 'apple'
-                  ? const SizedBox(
-                      width: 18,
-                      height: 18,
-                      child: CircularProgressIndicator(strokeWidth: 2),
-                    )
-                  : const Icon(Icons.apple_rounded),
-              label: const Text('Continue with Apple'),
-            ),
+            if (controller.supportsAppleSignIn) ...[
+              const SizedBox(height: AppSpacing.sm),
+              OutlinedButton.icon(
+                onPressed: controller.socialLoadingProvider.value == null
+                    ? controller.signInWithApple
+                    : null,
+                icon: controller.socialLoadingProvider.value == 'apple'
+                    ? const SizedBox(
+                        width: 18,
+                        height: 18,
+                        child: CircularProgressIndicator(strokeWidth: 2),
+                      )
+                    : const Icon(Icons.apple_rounded),
+                label: const Text('Continue with Apple'),
+              ),
+            ],
             const SizedBox(height: AppSpacing.md),
             Row(
               children: [
